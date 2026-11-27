@@ -1,0 +1,14 @@
+{
+  "finish_reason": "paused",
+  "summary": "Saved the prepared draft for review.",
+  "next_action": "Review the prepared draft against the agreed requirements.",
+  "context": {
+    "summary": "The draft is prepared and awaits review.",
+    "decisions": [],
+    "source_refs": [],
+    "limitations": []
+  },
+  "blockers": [],
+  "events": [],
+  "artifacts": []
+}

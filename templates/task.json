@@ -1,0 +1,76 @@
+{
+  "id": "replace-task-id",
+  "schema_version": 2,
+  "profile": "software",
+  "request": "Replace with the ticket text: the observed problem or requested behaviour, its source and constraints.",
+  "scope": {
+    "resources": [
+      "src",
+      "tests"
+    ],
+    "effects": [
+      "file_write",
+      "command"
+    ]
+  },
+  "risk": "MEDIUM",
+  "sources": [
+    {
+      "id": "TICKET",
+      "locator": "Replace with the ticket id or link"
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "AC1",
+      "expected": "Replace with the observable behaviour the ticket requires, checked through the real consumer path.",
+      "mandatory": true,
+      "evidence_ids": [
+        "tests"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "tests",
+      "kind": "test",
+      "parser": "unittest",
+      "argv": [
+        "python",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-v"
+      ],
+      "required": true
+    }
+  ],
+  "stages": [
+    {
+      "id": "implement",
+      "acceptance_ids": [
+        "AC1"
+      ],
+      "depends_on": []
+    }
+  ],
+  "unknowns": [],
+  "assumptions": [],
+  "execution_policy": {
+    "recovery_mode": "progress",
+    "stagnation_limit": 3,
+    "max_stage_cycles": null,
+    "max_task_cycles": 10,
+    "repeat_failure_limit": 2,
+    "max_diagnostic_passes": 5,
+    "diagnostic_timeout_seconds": 1200,
+    "active_time_budget_seconds": null,
+    "backend": "claude"
+  },
+  "reporting": {
+    "timezone": "local"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "iana_version": "2026f",
+  "distribution": "CPython tzdata 2026.6",
+  "distribution_home": "https://github.com/python/tzdata",
+  "source": "https://data.iana.org/time-zones/releases/tzdata2026f.tar.gz",
+  "archive_url": "https://files.pythonhosted.org/packages/0a/66/9a06c2227fedfd4919f0eaaa8b94377d9730882a7e4f95823c9a331ab5e1/tzdata-2026.6-py2.py3-none-any.whl",
+  "archive_sha256": "0a10eec6e13ef16b627fabed9a5f2ba61a62b1c67f327305f4e7e412a70b4aec",
+  "retrieved_at_utc": "2026-11-12",
+  "zones": {
+    "Europe/Bucharest": {
+      "path": "Europe/Bucharest",
+      "sha256": "898ef81fde9a693309be6a80873528488f128d952d3efbf83c61780a5c059ba5"
+    }
+  },
+  "source_archive_sha256": "01b4a91cec5167ed48c11e8ab78f2048cead78ce94b0cafcad0ae8c5a3044d3d",
+  "source_file": "SOURCE-europe",
+  "source_file_sha256": "fec11bf6c6bd0619a8777bbdaa2ecd184fde291cb4b97efa87d334c7145ba3c2",
+  "distribution_archive_verified_against": "https://pypi.org/pypi/tzdata/2026.6/json",
+  "verification": "Wheel SHA-256 matched official PyPI metadata; IANA source version matched wheel IANA_VERSION; compiled zone SHA-256 is verified at runtime."
+}

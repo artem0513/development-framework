@@ -1,0 +1,13 @@
+# Example caller in the product repository: .github/workflows/ase.yml
+# Then require the "ase / ase-ci-check" status in branch protection for the default branch.
+name: ase
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+jobs:
+  ase:
+    uses: YOUR-ORG/YOUR-PROTECTED-CI-REPO/.github/workflows/ase-merge-check.yml@FULL_COMMIT_SHA
+    with:
+      framework_repository: YOUR-ORG/DevelopmentFramework
+      framework_ref: FULL_COMMIT_SHA
+      test_command: python -m unittest discover -s tests

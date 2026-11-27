@@ -1,0 +1,18 @@
+{
+  "scope": {
+    "resources": ["replace-with-relative-resource.md"],
+    "dependencies": []
+  },
+  "resources": [
+    {"path": "replace-with-relative-resource.md", "status": "UNKNOWN"}
+  ],
+  "dependencies": [],
+  "candidate_checks": [],
+  "tools": [],
+  "skills": [],
+  "selected_tools": [],
+  "selected_skills": [],
+  "limitations": ["Replace with inspected scope, uncovered dependencies and concrete tool or permission unknowns"],
+  "authorization_granted": false,
+  "semantic_validation": false
+}

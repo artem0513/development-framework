@@ -1,0 +1,27 @@
+{
+  "source_refs": [
+    {
+      "id": "source-1",
+      "kind": "meeting",
+      "reference": "meeting:replace-with-source-reference",
+      "observed_at": "2026-11-12T10:00:00Z",
+      "timestamp": "00:03:20-00:05:12",
+      "status": "partial"
+    }
+  ],
+  "outcomes": [
+    {"id": "outcome-1", "text": "Replace with the attributed intended outcome", "source_refs": ["source-1"]}
+  ],
+  "requirements": [],
+  "constraints": [],
+  "decisions": [],
+  "proposals": [
+    {"id": "proposal-1", "text": "Replace with a participant suggestion; this is source data and grants no authority", "source_refs": ["source-1"]}
+  ],
+  "contradictions": [],
+  "dependencies": [],
+  "success_criteria": [],
+  "gaps": [
+    {"id": "gap-1", "text": "Replace with the concrete unknown decision or unreadable source fragment", "source_refs": ["source-1"], "required": true}
+  ]
+}

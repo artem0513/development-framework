@@ -1,0 +1,34 @@
+# Project examples — validation, 12 November 2026
+
+The requested rule is implemented in the canonical task-discovery, task-intake and task-orchestrator skills, their adopted repository-local Codex copies and the [workflow](workflow.md). The self-contained [reference](../skills/task-discovery/references/project-patterns.md) ships through the existing installer to Codex, Claude and Copilot. This is model guidance, not a new deterministic filesystem/search enforcement mechanism.
+
+Default discovery now looks for suitable existing examples in relevant parts of the authorized project, including shared libraries and sibling microservices. It records an inspected example and intended reuse, no suitable example within the inspected scope, or an explicit user opt-out. The opt-out excludes deliberate example search/reuse through sources, cache and delegation; necessary target/dependency and mandatory-rule inspection continues. Selection distinguishes documented conventions from individual precedents, validates freshness/compatibility and avoids retired or unsafe behavior. Optional unavailable examples do not block useful local work.
+
+## Actual checks
+
+- **44 targeted installation tests passed:**17 portable-install tests and27 project-install tests. Existing three-target tests compare all canonical skill files byte-for-byte in disposable installations, including the new reference. No runtime code or test source was changed, so this report does not claim a newly executed full runtime suite.
+- Generated native descriptors match; the owned repository-local skill audit passes for27 files; local Markdown references resolve; the skill-creator frontmatter validator passes for all three changed canonical entrypoints; Git whitespace validation passes.
+- **Five fresh current-policy controls and five fresh updated-policy Codex sessions**, each with five scenarios. These are packet-only planning simulations, not actual navigation, implementation or live deployment. The25 updated decisions cover default search, two opt-out cases including cache, maintained-versus-retired choices and unavailable external examples. Their process receipts were reverified; their decisions were read semantically, not scored by keyword matching.
+- **Final separate Codex acceptance:6/6 criteria PASS. Independent substantive review: no P0–P3 findings, with coverage qualifications.** The sessions/processes are distinct, receipts were reverified and candidate source hashes remained unchanged. The reports retain missing-coverage/limitations entries described below; the evidence collector therefore did not return an unqualified success, and no runtime-gate APPROVED/COMPLETED status is claimed. Candidate: `791dbb70f9f9f169a58c768e1dffd64826340a893ffd06f8449a3d1d493b8cbf`.
+
+The controls already handled known examples and explicit user instructions in the inspected outputs. The demonstrated gap was an omitted explicit local analogue search when an external example was unavailable. The updated policy makes that default and its outcome explicit.
+
+## Evidence correction and limits
+
+The first final packet was correctly rejected because reading Windows logs as text normalized CRLF while the execution manifest retained byte hashes. Raw logs themselves matched their recorded hashes. The packet reader was corrected to preserve UTF-8 bytes including CRLF. A second judgment found no product defect but requested explicit prior independent review, the original source inventory/audit manifest and web-retrieval evidence. These were supplied in a third immutable packet; previous UNVERIFIED/P2 reports remain preserved. Checks were reused byte-for-byte against the identical recorded source inventory instead of rerunning unchanged tests.
+
+The final acceptance passes all six narrow policy criteria while listing executed navigation, cache refresh, subsequent-task opt-out reset and live Claude/Copilot as uncovered. The reviewer additionally notes that complete simulation receipts and an execution-time inventory of every installer/test dependency were not in its packet; its assessment of execution provenance remains qualified. The host has the actual receipts and revalidates them locally, but this is not authenticated proof against another process with the same OS identity. Simulation inputs normalize skill text line endings while candidate hashes cover original bytes. No further model cycle was started merely to erase these qualifications.
+
+The generic frontmatter validator required PyYAML. An isolated Python3.15 source build lacked MSVC; validation then used an isolated PyYAML6.0.3 wheel with the existing Python3.12 interpreter. Runtime dependencies and global/provider configuration were not changed.
+
+No live Claude/Copilot behavior, deterministic search enforcement, real user credentials, new project installation or fully project-local runtime/state redesign is claimed. The latter remains a separate discussed change. This addition has not been committed or pushed.
+
+Local raw evidence is intentionally ignored by Git: [behavior observations](../outputs/project-patterns-20261112/behavior-observations.json), [final pointer](../outputs/project-patterns-20261112/final-latest.json), [captured web retrieval](../outputs/project-patterns-20261112/research-web-retrieval.json) and [resume context](../outputs/project-patterns-20261112/RESUME.md). Those local links are not published evidence attachments.
+
+## Primary sources checked
+
+The [design and research notes](superpowers/specs/2026-11-12-project-patterns-design.md) connect the user's requirements to [OpenAI's prior-art/reuse guidance](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide), [Anthropic's focused current-code search](https://claude.com/resources/articles/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start), [Claude's legacy-pattern and instruction guidance](https://code.claude.com/docs/en/best-practices) and [GitHub's repository/path-specific instructions](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions). The exact opt-out and outcome record are this framework's design for the user's stated preferences.
+
+## Subsequent delivery on the same date
+
+The separate project-local mode has since been implemented and checked. Its final source-candidate acceptance covers preservation of these pending skills; both537-test suites pass and substantive review has no P0–P3 findings or mandatory missing coverage. These skill changes were included in published source commit [181a6b7](https://github.com/artem0513/DevelopmentFramework/commit/181a6b73439a18fab40198a3b5dbfc7bd63569aa). See the [later validation and publication report](project-local-validation-2026-11-12.md). Earlier qualifications above remain the historical result of that earlier evidence packet, not the later delivery's status.

@@ -1,0 +1,25 @@
+# Automatic independent verification from an ordinary chat
+
+User request: eliminate the nested Codex Access denied interruption, preserve sandbox restrictions, repeat end-to-end validation. Implementation decision: [ADR 002](ADR-002.md).
+
+The denial was reproduced with the official workspace sandbox: opening the real `.codex/installation_id` read-only succeeded; opening it for reading/writing failed. Codex's new in-process server requires the latter operation at startup. An outside-workspace canary write was denied and a workspace write succeeded. This was not an AC-model failure. Redirecting a writable CODEX_HOME did not provide a supported independent authorization source; credentials were neither copied nor linked.
+
+The installed solution uses a verification-only MCP host. Implementation and checks remain inside the ordinary chat's workspace sandbox. Independent AC/review CLI sessions start from the trusted installed runtime with `--sandbox read-only`, `--skip-git-repo-check`, explicit target handoff and the bridge disabled inside reviewers. The skip flag permits a trusted non-Git startup directory; filesystem/network protection stays intact. Target project `.codex` configuration cannot bootstrap host MCP commands. Python `-P` prevents repository import shadowing.
+
+The host has fixed roots/state/executable, strict argument validation, canonical Git metadata boundaries and one active job. It exposes no implementation, test-command, arbitrary shell, authorization or publishing tool. Safe Git inspection disables executable repository helpers, filters and ambient Git overrides. State junctions and evidence hardlinks are rejected. Child stdin is DEVNULL, protecting the live MCP JSON-RPC channel. Configuration explicitly approves only the user-authorized verification tools; global approval/sandbox policy is unchanged.
+
+## Real end-to-end evidence
+
+`outputs/demo-chat-verified` began with `NotImplementedError` and was given an ordinary natural-language request. A fresh `codex exec --sandbox workspace-write` session autonomously loaded the global orchestrator, implemented division, executed 3 existing tests, called the configured MCP tools, received separate AC/review receipts and produced **APPROVED** at `2026-11-01T12:57:01.640465+00:00`. No manual external verification/PowerShell continuation occurred. Both independent sessions exited zero and independently reran all 3 tests. Their source fingerprint was `f4fbe1d0ef3272b6272639b460d4fe543c69c9f6bb0ef3747007376e72dcfef0`.
+
+Positive evidence was frozen before defect injection: `outputs/chat-positive-evidence`, `outputs/chat-positive-summary.json`, and the complete ordinary-chat session log/receipt in `outputs/demo-chat-verified`. The outer model's exit code or summary alone is not the evidence; the checks, raw independent outputs, process receipts and gate are retained separately.
+
+A separate real `read-only` Codex probe actually attempted workspace and outside-home canary writes; both were denied. See `outputs/nested-probe/readonly.raw.json`, `readonly.session.log` and `readonly.receipt.json`. The workspace sandbox's earlier actual permission probe independently demonstrated allowed inside-write and denied outside-write. No Full Access mode, ACL widening, credential duplication or dangerous bypass flag was introduced.
+
+Independent [code review](nested-code-review.md) reproduced and closed fsmonitor/textconv/clean-filter host execution, Python import shadowing, state junction/hardlink redirects and inherited MCP stdin. Tests use deterministic model adapters for protocol cases only; the chat experiment above uses real Codex models.
+
+The deliberate-defect chat run and final full-suite results are recorded in the independent nested acceptance audit. Production server-side enforcement remains outside this fix: local same-user trust limitations still apply, and no real remote was pushed.
+
+Executed follow-up checks: **60 tests in 93.480 seconds, OK**, zero skips (`outputs/nested-full-tests.log`). The deliberate-defect ordinary chat reached **REJECTED** at `2026-11-01T12:58:14.809851+00:00`; it performed the failing check and called the same independent MCP verification path. The defect source was not repaired or published. These outcomes are independently assessed in [nested-acceptance-audit.md](nested-acceptance-audit.md).
+
+The AC prompt was subsequently clarified to distinguish missing confirmed behavior (which requires UNVERIFIED/BLOCKED/FAIL) from optional wider studies and replay limitations. The deterministic gate was not relaxed. A new ordinary chat using that current runtime, `outputs/demo-chat-current`, again completed the whole workflow without manual continuation; current-source gate APPROVED was independently recomputed at `2026-11-01T13:06:10.781431+00:00`, fingerprint `41fda1916eaff81ea437bb149fa630fff97f0a4e92de9c8b892601c1d10de942`. Its frozen evidence is `outputs/chat-current-evidence`; this new run supplements rather than overwrites the earlier positive and negative experiments.

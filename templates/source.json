@@ -1,0 +1,12 @@
+{
+  "id": "requirements",
+  "locator": "local:requirements.txt",
+  "revision": "replace-with-observed-content-hash",
+  "extent": 10,
+  "ranges": [],
+  "gaps": [
+    "Read and reconcile the complete source"
+  ],
+  "status": "discovered",
+  "unit": "lines"
+}

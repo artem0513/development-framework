@@ -1,0 +1,10 @@
+{
+  "origin": "Local installed OpenCode gh-fix-ci skill",
+  "source_files": {
+    "SKILL.md": "2e45c71cdf8690b54639c1b7aa6e4401f5db557c45b283e213d4f793cc570661",
+    "scripts\\inspect_pr_checks.py": "76fb81c194049b0a0bfaea8eafbead7a096c0a9f3da11c1bd3de7b1100256b47",
+    "LICENSE.txt": "44e03f7e263eb3ad256440c1eeab5e49168baff5a78ecef9a5447261cf3a91bc"
+  },
+  "upstream_revision": null,
+  "note": "Exact upstream revision unavailable in local installation. Adapted source; preserve Apache-2.0 license. No upstream freshness claim."
+}

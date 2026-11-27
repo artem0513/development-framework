@@ -1,0 +1,1 @@
+This adaptation derives from the locally installed gh-fix-ci skill and inspect_pr_checks.py. Original local source hashes and revision limitation are recorded in provenance.json. Apache License 2.0 retained in LICENSE.txt. Adaptation adds repository/head binding, fail-closed statuses, bounded read-only calls and redaction.

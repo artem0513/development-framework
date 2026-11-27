@@ -1,0 +1,84 @@
+{
+  "id": "replace-task-id",
+  "schema_version": 2,
+  "profile": "document",
+  "request": "Replace with the requested outcome and source-backed constraints; publication remains held until its destination is confirmed.",
+  "scope": {
+    "resources": [
+      "deliverable.md"
+    ],
+    "effects": [
+      "file_write"
+    ]
+  },
+  "risk": "MEDIUM",
+  "acceptance": [
+    {
+      "id": "AC1",
+      "expected": "Replace with observable required content and source coverage for the deliverable.",
+      "mandatory": true,
+      "evidence_ids": [
+        "deliverable"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "deliverable",
+      "kind": "artifact",
+      "path": "deliverable.md",
+      "required": true
+    }
+  ],
+  "stages": [
+    {
+      "id": "draft",
+      "acceptance_ids": [
+        "AC1"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "publish",
+      "scope": {
+        "resources": [
+          "deliverable.md"
+        ],
+        "effects": []
+      },
+      "acceptance_ids": [],
+      "depends_on": [
+        "draft"
+      ],
+      "unknown_ids": [
+        "destination"
+      ]
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "destination",
+      "statement": "The external publication destination and authority are not confirmed.",
+      "status": "UNRESOLVED",
+      "blocking_stage_ids": [
+        "publish"
+      ]
+    }
+  ],
+  "assumptions": [],
+  "sources": [],
+  "execution_policy": {
+    "recovery_mode": "progress",
+    "stagnation_limit": 3,
+    "max_stage_cycles": null,
+    "max_task_cycles": 10,
+    "repeat_failure_limit": 2,
+    "max_diagnostic_passes": 5,
+    "diagnostic_timeout_seconds": 1200,
+    "active_time_budget_seconds": null,
+    "backend": "codex"
+  },
+  "reporting": {
+    "timezone": "local"
+  }
+}

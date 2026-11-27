@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "purpose": "Descriptive adoption worksheet; not loaded as execution permissions or project approval",
+  "repositories": [],
+  "sources": [],
+  "workspace_kind": null,
+  "timezone": "local",
+  "backend_targets": [],
+  "profiles": [],
+  "conventions": {
+    "branch_pattern": null,
+    "task_identity": null
+  },
+  "verification": {
+    "commands": [],
+    "independent_acceptance_backend": null,
+    "independent_review_backend": null,
+    "capability_manifest": null
+  },
+  "memory": {
+    "scope": "local computer, isolated registered project/workspace",
+    "automatic_cloud_sync": false
+  },
+  "publication": {
+    "enabled": false,
+    "remote": null
+  },
+  "authorization_granted": false
+}

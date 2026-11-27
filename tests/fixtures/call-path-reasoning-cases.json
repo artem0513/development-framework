@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "scope": "Disposable working examples with actual dispatcher and compatibility checks. Rubric is withheld from role requests.",
+  "cases": [
+    {
+      "id": "due-handler-result",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "The daily run leaves a due draft reimbursement open. Restore the existing due-work flow so the weekly backlog reflects recorded closure and a future draft stays open. The existing schedule and Finance's written eligibility apply.",
+        "scope": {
+          "resources": [
+            "worker.py"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "CHANGE",
+            "expected": "Running the existing dispatcher records the eligible closure, including its reason, and leaves future work open.",
+            "evidence_ids": [
+              "unit"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "unit",
+            "kind": "test",
+            "argv": [
+              "PYTHON",
+              "-B",
+              "-m",
+              "unittest",
+              "-v",
+              "test_artifact"
+            ],
+            "parser": "unittest",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "scope": {
+              "resources": [
+                "worker.py"
+              ],
+              "effects": [
+                "file_write",
+                "command"
+              ]
+            },
+            "acceptance_ids": [
+              "CHANGE"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": []
+      },
+      "files": {
+        "dispatch.py": "def run_due(entries, handlers, day):\n    for entry in entries:\n        if entry[\"due_on\"] <= day:\n            handlers[entry[\"kind\"]](entry)\n",
+        "ledger.py": "class Ledger:\n    def __init__(self, connection):\n        self.connection = connection\n\n    def open_entries(self):\n        rows = self.connection.execute(\"SELECT id, kind, due_on FROM expenses WHERE status = 'draft'\")\n        return [{\"id\": key, \"kind\": kind, \"due_on\": day} for key, kind, day in rows]\n\n    def close(self, key, reason):\n        with self.connection:\n            self.connection.execute(\n                \"UPDATE expenses SET status = 'closed', reason = ? WHERE id = ? AND status = 'draft'\",\n                (reason, key),\n            )\n",
+        "worker.py": "from dispatch import run_due\n\n\ndef close_due(entry, day):\n    return {**entry, \"status\": \"closed\", \"reason\": \"Draft inactivity\"}\n\n\ndef run(day, ledger):\n    run_due(ledger.open_entries(), {\"expense\": close_due}, day)\n",
+        "finance.md": "Only draft expenses enter this schedule. The stored due_on date determines eligibility.\nA due draft closes with the recorded reason \"Draft inactivity\". The finance backlog reads the stored ledger rows.\n",
+        "test_artifact.py": "from pathlib import Path\nimport sqlite3\nimport tempfile\nimport unittest\nfrom contextlib import closing\n\nfrom ledger import Ledger\nfrom worker import run\n\n\nclass DailyCloseTests(unittest.TestCase):\n    def test_due_closure_is_visible_to_a_later_ledger_reader(self):\n        with tempfile.TemporaryDirectory() as directory:\n            database = Path(directory) / \"expenses.db\"\n            with closing(sqlite3.connect(database)) as writer:\n                with writer:\n                    writer.execute(\"CREATE TABLE expenses (id TEXT, kind TEXT, due_on TEXT, status TEXT, reason TEXT)\")\n                    writer.executemany(\"INSERT INTO expenses VALUES (?, ?, ?, ?, ?)\", [\n                        (\"due\", \"expense\", \"2026-11-25\", \"draft\", None),\n                        (\"future\", \"expense\", \"2026-12-01\", \"draft\", None),\n                    ])\n                run(\"2026-11-25\", Ledger(writer))\n                run(\"2026-11-25\", Ledger(writer))\n                with closing(sqlite3.connect(database)) as reader:\n                    rows = reader.execute(\"SELECT id, status, reason FROM expenses ORDER BY id\").fetchall()\n                    self.assertEqual(rows, [(\"due\", \"closed\", \"Draft inactivity\"), (\"future\", \"draft\", None)])\n"
+      }
+    },
+    {
+      "id": "legacy-voucher-site",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "The daily voucher export dates overnight Riverside vouchers differently from register close. Align the live exports at both configured sites and preserve the recorded date on historical vouchers.",
+        "scope": {
+          "resources": [
+            "voucher_report.py"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "CHANGE",
+            "expected": "Configured live rows follow the register calendar and legacy rows retain their stored posting dates.",
+            "evidence_ids": [
+              "unit"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "unit",
+            "kind": "test",
+            "argv": [
+              "PYTHON",
+              "-B",
+              "-m",
+              "unittest",
+              "-v",
+              "test_artifact"
+            ],
+            "parser": "unittest",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "scope": {
+              "resources": [
+                "voucher_report.py"
+              ],
+              "effects": [
+                "file_write",
+                "command"
+              ]
+            },
+            "acceptance_ids": [
+              "CHANGE"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": []
+      },
+      "files": {
+        "register.py": "from datetime import datetime, timedelta\n\nSHIFT_END = {\"RS\": 3, \"HT\": 1}\n\n\ndef trading_date(entry):\n    local = datetime.fromisoformat(entry[\"booked_at\"])\n    if local.hour < SHIFT_END[entry[\"site\"]]:\n        local -= timedelta(days=1)\n    return local.date().isoformat()\n",
+        "voucher_report.py": "from datetime import datetime\n\n\ndef export(entries):\n    return [(entry[\"id\"], entry[\"archived_day\"] if \"archived_day\" in entry\n             else datetime.fromisoformat(entry[\"booked_at\"]).date().isoformat())\n            for entry in entries]\n",
+        "voucher-input.md": "Live voucher rows include a configured site and use the same trading date as register close.\nRows from before migration carry archived_day, their recorded posting date. They may omit site or refer to a retired site.\nThe recorded day for these historical rows is authoritative.\n",
+        "test_artifact.py": "import unittest\n\nfrom register import trading_date\nfrom voucher_report import export\n\n\nclass VoucherExportTests(unittest.TestCase):\n    def test_overnight_export_matches_register_at_the_two_sites(self):\n        rows = [{\"id\": \"rs\", \"site\": \"RS\", \"booked_at\": \"2026-11-26T02:00:00-06:00\"},\n                {\"id\": \"ht\", \"site\": \"HT\", \"booked_at\": \"2026-11-26T02:00:00-06:00\"}]\n        self.assertEqual(export(rows), [(entry[\"id\"], trading_date(entry)) for entry in rows])\n        self.assertEqual(export(rows), [(\"rs\", \"2026-11-25\"), (\"ht\", \"2026-11-26\")])\n\n    def test_existing_archived_rows_keep_their_recorded_day(self):\n        rows = [{\"id\": \"legacy\", \"booked_at\": \"2024-11-26T00:15:00-06:00\", \"archived_day\": \"2024-11-26\"},\n                {\"id\": \"retired\", \"site\": \"OLD\", \"booked_at\": \"2024-11-26T00:15:00-06:00\", \"archived_day\": \"2024-11-25\"}]\n        self.assertEqual(export(rows), [(\"legacy\", \"2024-11-26\"), (\"retired\", \"2024-11-25\")])\n"
+      }
+    }
+  ],
+  "rubric": {
+    "due-handler-result": {
+      "family": "actual dispatcher invocation and persisted postcondition",
+      "criteria": [
+        "Trace worker.run through the existing dispatcher, which invokes each registered handler with one entry.",
+        "Use the existing Ledger.close at that work boundary so a later connection sees the recorded state and reason.",
+        "Preserve Finance's existing due-day selection and the future draft. No additional scheduler or storage mechanism is needed.",
+        "Do not treat a corrected signature, returned replacement row, or helper-only test as evidence of persistence."
+      ]
+    },
+    "legacy-voucher-site": {
+      "family": "shared rule reuse with legitimate historical inputs",
+      "criteria": [
+        "Use the established register trading-date rule for live rows rather than copying shift cutoffs.",
+        "Preserve the archive contract for historical rows with absent or retired site, without guessing a cutoff.",
+        "Check present behavior at the real voucher export for live and historical inputs."
+      ]
+    }
+  }
+}

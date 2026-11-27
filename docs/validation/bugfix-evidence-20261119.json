@@ -1,0 +1,420 @@
+{
+  "checked_at_utc": "2026-11-19T20:29:40.479346+00:00",
+  "historical_note": "Dated 2026-11-19 record of the native Codex chain. Its limitation about Claude live execution is superseded: on 2026-11-21 the final whole-root adequacy, AC and review of task bugfix-evidence-20261119 ran live on the Claude backend (commit c750162).",
+  "scope": "Disposable local API-v2 fixture through real ase and Codex; no remote corporate service/VM/database was accessed.",
+  "runtime_policy_sha256": "0b6227a32d7ccacd4e86abda8e673b50d95072e1d4d6f2bb40086bcad1c16018",
+  "native_chain": {
+    "result": "APPROVED",
+    "stage_layout": "edit (no acceptance criteria) -> repair acceptance -> whole-task gate",
+    "original_baseline_log": "test_complete_response_reaches_consumer (test_consumer.ConsumerTests.test_complete_response_reaches_consumer) ... FAIL\n\n======================================================================\nFAIL: test_complete_response_reaches_consumer (test_consumer.ConsumerTests.test_complete_response_reaches_consumer)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"<repo>\\outputs\\bugfix-evidence-20261119\\live-consumer-execution-bound\\repo\\tests\\test_consumer.py\", line 12, in test_complete_response_reaches_consumer\n    self.assertEqual(result,{'Number':'M7','OriginGroup':'B','Discount':17})\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {'Number': 'M7', 'OriginGroup': 'A', 'Discount': 0} != {'Number': 'M7', 'OriginGroup': 'B', 'Discount': 17}\n- {'Discount': 0, 'Number': 'M7', 'OriginGroup': 'A'}\n?              ^                                  ^\n\n+ {'Discount': 17, 'Number': 'M7', 'OriginGroup': 'B'}\n?              ^^                                  ^\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (failures=1)\n",
+    "final_source": "import json\ndef apply_rules(material, transport):\n    response = json.loads(transport(json.dumps(material)))\n    return response\ndef consumer(material, transport):\n    return apply_rules(material, transport)\n",
+    "test_source": "import json, unittest\nfrom client import consumer\nclass ConsumerTests(unittest.TestCase):\n def test_complete_response_reaches_consumer(self):\n  original={'Number':'M7','OriginGroup':'A','Discount':0}\n  observed=[]\n  def transport(raw):\n   observed.append(json.loads(raw))\n   return json.dumps({'Number':'M7','OriginGroup':'B','Discount':17})\n  result=consumer(original,transport)\n  self.assertEqual(observed,[original])\n  self.assertEqual(result,{'Number':'M7','OriginGroup':'B','Discount':17})\n  self.assertEqual(original,{'Number':'M7','OriginGroup':'A','Discount':0})\n",
+    "contract": "API v2 returns the complete updated Material, not a patch. The consumer must use the response. Number is stable; OriginGroup and Discount are legitimate changes. No selective merge is needed. The test transport is a sanitized example of this authoritative fixture contract, not a production-service claim.\n",
+    "before_trace": "Dossier explicitly selects authenticated before-source for def broken_return; actual repair removes that helper.",
+    "actual_checks": [
+      {
+        "id": "consumer",
+        "exit_code": 0,
+        "counts": {
+          "total": 1,
+          "skipped": 0,
+          "failed": 0
+        },
+        "log": "test_complete_response_reaches_consumer (test_consumer.ConsumerTests.test_complete_response_reaches_consumer) ... ok\n\n\n\n----------------------------------------------------------------------\n\nRan 1 test in 0.000s\n\n\n\nOK\n\n"
+      },
+      {
+        "id": "edit-smoke",
+        "exit_code": 0,
+        "counts": {
+          "total": 1,
+          "skipped": 0,
+          "failed": 0
+        },
+        "log": "test_complete_response_reaches_consumer (test_consumer.ConsumerTests.test_complete_response_reaches_consumer) ... ok\n\n\n\n----------------------------------------------------------------------\n\nRan 1 test in 0.000s\n\n\n\nOK\n\n"
+      }
+    ],
+    "receipts": [
+      {
+        "role": "ac",
+        "execution_id": "00049b7a52fe4f2cbf344572a0ca75ea",
+        "session_id": "01a1f56c-b078-7e73-89c1-8da40e69a42b",
+        "request_sha256": "5f35b744f2e0377ed0ff219a60acd72db0c2bbe19447aaa0119dce0dbb9be8dd",
+        "receipt_sha256": "d3c02455a8f495b1951a418887c2254805d544285f4b0eaefc69acb5a8facc3d",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "0ce6d49e36d5409daf0f8728ef9936ec",
+        "session_id": "01a1f56d-5c49-7952-8da7-f625569159a9",
+        "request_sha256": "a2c5a472b584bb22de234e3031cadc339afc06502f325211a52ef6b025eb4188",
+        "receipt_sha256": "a31d7fa716117d86a2541df14dd360d46d78da0053647e0f1fc8f62accffc544",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "10569a91c3a841e09d57e5fcc0b5f287",
+        "session_id": "01a1f56e-d197-74d1-bcda-5347355f8bc5",
+        "request_sha256": "8342792efa13762623c0736f8906fcbcf709bf6bf2bca062f0c8efde96136b80",
+        "receipt_sha256": "905a351c878f6761085b9651998f205e7e9ded16404d18893ba05a9d8e1226f2",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "1faf3cc6e9f4480d88a3ff45a5ef2486",
+        "session_id": "01a1f56c-e3f7-7fc1-9819-11d956cdb898",
+        "request_sha256": "600c6a90c83da51719c095daccbe9af0e99684837423ac848b3049a9117a30b3",
+        "receipt_sha256": "2763a688ac9fcf9e41be7fd42e76a3a1eb30a7c57beadb73d578c285d8c52220",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "41d14ff76bd448599e6ff9f3bdf9e0e5",
+        "session_id": "01a1f56d-bad2-7fa2-9ead-defdb7d67c68",
+        "request_sha256": "c3c6f40c5eaa8d602776423c4fd64d2ccca936a62893a7dadf0556e2df198979",
+        "receipt_sha256": "f813e1ea3d7edb70566a7bc61428c53a586bbb58ea7ec1c927028ece6bf7d482",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "447f3959675341dbb24c78d89c6dc982",
+        "session_id": "01a1f56d-1aaa-7be1-861b-708a8ac13c93",
+        "request_sha256": "dad1fca3ff8f283fd4294ddc4f9b45853c36035e14e3476204932c0243e12699",
+        "receipt_sha256": "251bb0e801768c6526cbe25b3c80e24a7b6923b660de81132eeda301dbedf0e6",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "4c943343a8a94a3dbf27c788a92b4b59",
+        "session_id": "01a1f56f-5c71-7192-8df1-d9d218e5745e",
+        "request_sha256": "f14d5a9807221f0b89ca4609d0df1e37e5136ccc4e5dce5a85745af791dd8527",
+        "receipt_sha256": "b1103dcdbe7dfa70e3adb4f8038ccc031f8500bd255e754d947c8de97354572c",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "515859c2f3db43139e57272c22726733",
+        "session_id": "01a1f56e-197c-7680-b180-f964ff35baa3",
+        "request_sha256": "ec1d7b6c5c16f0061860411bb518e3bb4936c534010ac10b3a61dbfc6e4193fb",
+        "receipt_sha256": "553e0c9d8fc3881562c4fbd7dc0073767ce12fb4f33256e8a86baf0e01d0c72c",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "ac",
+        "execution_id": "56d4e60679094332b61bcbb4c5228661",
+        "session_id": "01a1f56d-7d07-75b3-b1be-0d0d346c4ee3",
+        "request_sha256": "48e2d6fa45f923ed2629aae575151c99322565fd9a2fbd95c661999c5bd8e9c9",
+        "receipt_sha256": "a5b48101bc3900b9a48f58bffcde6e1857203121fd88fdefd6a238c531622a30",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "ac",
+        "execution_id": "70fcf6e52c5442e68304afa289666d54",
+        "session_id": "01a1f56d-0356-7320-855b-7c53b9f10d74",
+        "request_sha256": "73dc2efd440d40567987c379a722d0712e80440783b556aeb5e43086c6145e84",
+        "receipt_sha256": "9498100bf95b4504c2f699fd0f999a3f8170e58c2b90960eee4f825934d98173",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "implementation",
+        "execution_id": "7a882c47f3a04990baf944eb106f6ccc",
+        "session_id": "01a1f56c-6256-7791-ab0b-e37987bad694",
+        "request_sha256": "e8c80fdc9270895dbfd945f76faad98ce6179414adb4781c5a235467b4de78bc",
+        "receipt_sha256": "5ba4221aa311ca431d1f58d07f3e8bf84118c4170578eff4aa21cfa2d407b2c0",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "ac",
+        "execution_id": "896e9dabb4094c7faacaef6a5f0e69bb",
+        "session_id": "01a1f56d-de49-7e03-a765-c28ca3d105b7",
+        "request_sha256": "0fa50534a098371112bbb55c005d456a4138c4a21c37590e5043413e997d4882",
+        "receipt_sha256": "501ae2c309d5ba10be1cdb929dc1fdbb2c90c76605cc9ba8df5d31027ec8eb94",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "implementation",
+        "execution_id": "acfbac8286c64c3a9d81c8c32d27f17b",
+        "session_id": "01a1f56d-3b3b-71f0-92d0-76d46de4b492",
+        "request_sha256": "f8acb6866f7ea384b442d3d142b147bb795b5009bed268fa6c0b5b2c66c8619c",
+        "receipt_sha256": "7761b89823dc00c41850786b45b8cbf73656fee0f391f184715cfc9c0cbcb1f8",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "ac",
+        "execution_id": "bf23bfe5d18b4d26a748a0303303e8e5",
+        "session_id": "01a1f56f-2666-76d3-8525-e96708f6e63c",
+        "request_sha256": "edfe246998d8c5c298d79a9b6c1a73497e2ffc5eb8478c116ab45b0ff02194e4",
+        "receipt_sha256": "9ca5e320611509fa0a08892da590e5b23dbd17684700b95ae5002922f453c26f",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "bf4bf778f9c14ff7b5003a0e3d372c48",
+        "session_id": "01a1f56d-f636-7811-b8fe-fe634ce35279",
+        "request_sha256": "896c88c8951a902327bfe4dd75a4f3f08e9a63b3a119efe413c43d65aab033a0",
+        "receipt_sha256": "73c5a0fa963120d2b4e63629236ffd72124cfe4a8ed0945d050800cf1274a9b5",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "c38d1445f4a64a63a3aae19b3ce635e8",
+        "session_id": "01a1f56c-8dfb-71a0-90b7-da9de5fd6111",
+        "request_sha256": "47c453d6aae4c9a26d677034fbf70cb9ce6fa526e9d917ade2e81f9ecbd5c2dd",
+        "receipt_sha256": "99bd7ee4a2ba2069d504747c1d32c8312caaa607b6859977f11d13927a5d1f11",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "cdd9b38a9b394f9a80a594d1bdabd4ee",
+        "session_id": "01a1f56c-c228-7953-a79d-8f486be013e7",
+        "request_sha256": "df0247d0f4ccefeb15f30841e7bbb8fb08c96d8ca422b284f5ebe0f965be13b4",
+        "receipt_sha256": "941f6e1f9d9327954c1d10788389757374c4a7476b64af81334dc81d2119ff88",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "ac",
+        "execution_id": "d8bfa3f7428b453aa69d9392942d6c7a",
+        "session_id": "01a1f56e-6b43-76b0-80f2-7cc16da70051",
+        "request_sha256": "c0359ebf0ac676f86035f28c04df74515a2998f6d6fa532f3658b5440e651c1f",
+        "receipt_sha256": "ed58413d7165172effa85fdeb20348e6ecf252a8a3669d249e9793e3c273a025",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "f65e568aa3d94e499fde0a54d3290031",
+        "session_id": "01a1f56e-a1e8-74d2-9780-61ee283a43e1",
+        "request_sha256": "98e99ff874183d53b4ae07abcabc1f13a3bb266b3b98fc953955c05235214e95",
+        "receipt_sha256": "c0898111d1fd1f79c47441cba2d4aebfe0612952debe6d4c13a78f54a6cd8fe5",
+        "evidence_kind": "independent_cli"
+      },
+      {
+        "role": "review",
+        "execution_id": "f6cd76c9952f45ecb8ba620eb8a2c988",
+        "session_id": "01a1f56d-91e9-79a3-9094-2a1136acbcfd",
+        "request_sha256": "df604f86ce15d784c8322aa69fb6746dd433383f34f2d7ee200ecafaf09c99a7",
+        "receipt_sha256": "87244ce913e453ee381ab854ef5774af1dd60f4c5ecb46004d2a588c67eba4c9",
+        "evidence_kind": "independent_cli"
+      }
+    ],
+    "judgments": {
+      "adequacy": {
+        "kind": "independent_cli",
+        "session": "01a1f56e-d197-74d1-bcda-5347355f8bc5",
+        "payload": {
+          "additional_scenarios": [],
+          "bugfixes": [
+            {
+              "cause": {
+                "evidence": [
+                  {
+                    "assertion": "The test calls client.consumer through the JSON transport. The transport supplies OriginGroup=B and Discount=17. The baseline fails the result equality assertion with OriginGroup=A and Discount=0, matching the original request.",
+                    "check_id": "consumer",
+                    "test_id": "test_consumer.ConsumerTests.test_complete_response_reaches_consumer",
+                    "test_source": "tests/test_consumer.py"
+                  }
+                ],
+                "missing_coverage": [],
+                "reason": "In _ase_before/client.py, consumer calls apply_rules, which serializes the request, invokes the transport, and decodes its response. The first divergence is broken_return returning the original request and discarding the decoded response. That explains the stale values in baseline.txt and violates API_CONTRACT.md, which defines the v2 response as the complete updated Material.",
+                "status": "PASS"
+              },
+              "necessity": {
+                "evidence": [
+                  {
+                    "assertion": "The test checks that the original values reach the transport, the full returned object contains Number=M7, OriginGroup=B and Discount=17, and the caller's input retains its original values.",
+                    "check_id": "consumer",
+                    "test_id": "test_consumer.ConsumerTests.test_complete_response_reaches_consumer",
+                    "test_source": "tests/test_consumer.py"
+                  }
+                ],
+                "missing_coverage": [],
+                "reason": "The caller must propagate the decoded object because v2 supplies a complete replacement. Returning it directly from apply_rules removes the faulty helper and preserves all response fields by construction. A selective merge could drop legitimate updates, and a wrapper, cache or retry adds no behavior required to correct the return value. The source change record shows that the test was unchanged.",
+                "status": "PASS"
+              },
+              "regression": {
+                "evidence": [
+                  {
+                    "assertion": "The same consumer test fails in baseline.txt at the full-result assertion with the original values and passes in _ase_context/logs/consumer.txt, including the request and unchanged-input assertions.",
+                    "check_id": "consumer",
+                    "test_id": "test_consumer.ConsumerTests.test_complete_response_reaches_consumer",
+                    "test_source": "tests/test_consumer.py"
+                  }
+                ],
+                "missing_coverage": [],
+                "reason": "The unchanged test exercises the actual consumer and the production serialization and decoding path with the contract-defined fixture transport. The recorded baseline failure and current passing run distinguish the original defect from the repair.",
+                "status": "PASS"
+              },
+              "stage_id": "repair"
+            }
+          ],
+          "missing_coverage": [],
+          "scenarios": [
+            {
+              "evidence": [
+                {
+                  "assertion": "The transport observes the serialized request exactly once. The consumer result equals {'Number': 'M7', 'OriginGroup': 'B', 'Discount': 17}, and the original input still equals {'Number': 'M7', 'OriginGroup': 'A', 'Discount': 0}.",
+                  "check_id": "consumer",
+                  "test_id": "test_consumer.ConsumerTests.test_complete_response_reaches_consumer",
+                  "test_source": "tests/test_consumer.py"
+                }
+              ],
+              "id": "consumer-chain",
+              "missing_coverage": [],
+              "reason": "The current check record matches the supplied source fingerprint and records a successful consumer execution. Its log identifies the passing test, whose assertions cover the request, complete response and input preservation through the actual consumer boundary.",
+              "status": "PASS"
+            }
+          ],
+          "summary": "The supplied source, authoritative fixture contract, unchanged test, and before-and-after logs establish adequate coverage for the local consumer repair. No material coverage gaps were identified within the approved fixture scope. Production-service behavior is outside that scope."
+        }
+      },
+      "ac": {
+        "kind": "independent_cli",
+        "session": "01a1f56f-2666-76d3-8525-e96708f6e63c",
+        "payload": {
+          "criteria": [
+            {
+              "evidence": [
+                "Cause confirmed for repair. In _ase_before/client.py, consumer calls apply_rules, which serializes the request, invokes the fixture transport, and decodes its response. The first divergence from API_CONTRACT.md occurs when broken_return discards the decoded Material and returns the original request. This explains the stale OriginGroup=A and Discount=0 recorded in baseline.txt.",
+                "Correction is necessary and sufficient for the fixture contract. API_CONTRACT.md defines the response as the complete updated Material. client.py removes broken_return and returns the decoded object at the existing boundary, preserving every response field. A selective merge could discard legitimate updates. The defect occurs after decoding, so a cache or retry would leave the faulty return path in place. _ase_context/source_changes.json identifies client.py as the sole change and confirms the test stayed unchanged.",
+                "Regression and consumer-chain coverage are sufficient. The unchanged test in tests/test_consumer.py invokes the actual consumer through the JSON transport boundary and checks that the request reaches the transport exactly once, the full result contains Number=M7, OriginGroup=B and Discount=17, and the input retains its original values. baseline.txt shows the same test failing at full-result equality with the original values. The mapped consumer check now passes.",
+                "_ase_context/actual_checks.json matches the request's check digest and source, contract, and plan bindings. The consumer and edit-smoke checks both exited successfully, and their logs each show one passing test with zero skips. The separate independent adequacy assessment matches the current bindings and maps the scenario and repair judgments to consumer."
+              ],
+              "expected": "Actual consumer receives complete response, including Number=M7, OriginGroup=B, Discount=17; original input remains unchanged.",
+              "id": "RESPONSE",
+              "limitations": [
+                "The judgment covers the local disposable fixture and its consumer path. Production-service behavior and publication enforcement are outside this criterion."
+              ],
+              "method": "Traced the call path in the captured baseline and current source against the authoritative fixture contract, compared the unchanged test with the before-and-after logs, and checked the current execution records and separate adequacy assessment.",
+              "missing_coverage": [],
+              "status": "PASS"
+            }
+          ]
+        }
+      },
+      "review": {
+        "kind": "independent_cli",
+        "session": "01a1f56f-5c71-7192-8df1-d9d218e5745e",
+        "payload": {
+          "findings": [],
+          "summary": "No actionable defects or missing required coverage were found within the approved local fixture scope. For the repair stage, the cause is confirmed. The original consumer called apply_rules, which decoded the transport response and then passed it to broken_return. That helper discarded the decoded object and returned the stale request, violating the complete-response contract in API_CONTRACT.md. The correction is necessary at that return boundary. Returning the decoded object directly preserves every response field, including legitimate updates, without mutating the input or introducing a selective merge. The regression evidence is adequate. The unchanged test exercises the actual consumer through JSON serialization, the fixture transport, and response decoding. The baseline records a failure with stale values, and the current consumer check records a pass with Number=M7, OriginGroup=B, Discount=17, and the original input intact. The current edit-smoke check also passed. The review was limited to the supplied source and execution records. Production-service behavior and publishing enforcement were outside scope."
+        }
+      }
+    }
+  },
+  "packet_scenarios": {
+    "count": 6,
+    "scope": "One actual current Codex session answering six stipulated offline cases; proposed artifacts, not executed service operations.",
+    "session_id": "01a1f56c-8493-7890-8830-04e886e8140a",
+    "execution_id": "1ab7a55eb4b748e99d1f66a84791768c",
+    "receipt_sha256": "70273fbc9f32bf324b1c7315b54dccbf950f18ad11287bbf483561a77fb775d8",
+    "outputs": [
+      {
+        "artifact": "Proposed diagnostic record for one sanitized round trip. Record the Number key, presence, and value at five points: caller input, outgoing wire JSON, raw response JSON, deserialized result, and downstream request. Mark each observation pending until captured. Compare adjacent points against the applicable contract and record the first unexpected change with its source location.",
+        "decision": "UNVERIFIED. The merger restores the downstream request in the observed case. The cause of the lost Number and the necessity of the merger remain unverified.",
+        "evidence": [
+          "The round trip loses Number and the downstream request runs with MappingRulesResultMerger.",
+          "The fixture reports 24 passing helper tests and an implementation summary that claims identity is preserved."
+        ],
+        "id": "symptom-only-merger",
+        "limits": [
+          "The outgoing JSON, raw response and deserialized result have not been compared.",
+          "No consumer regression with a failing baseline or controlled broken variant is supplied."
+        ],
+        "next_operation": "Have the host capture and compare one sanitized round trip before choosing a repair boundary.",
+        "owner_message": ""
+      },
+      {
+        "artifact": "Candidate implementation:\ndef apply(material, api):\n    return api.evaluate(material)\n\nDrive the normal rules integration with request {Number:'M7', OriginGroup:'A', Discount:0} and the captured v2 response {Number:'M7', OriginGroup:'B', Discount:17}. Assert that the material consumed downstream has M7, B and 17. The original caller would yield A and 0, so both changed-field assertions should fail on the baseline.",
+        "decision": "The supplied caller discards the complete v2 response. Return that response directly. The contract provides no reason to add a merger.",
+        "evidence": [
+          "The caller assigns the API result to response and returns the original material.",
+          "The v2 contract defines a complete Material response, and the sanitized capture shows changes to OriginGroup and Discount.",
+          "The reported green helper test only merges OriginGroup."
+        ],
+        "id": "caller-ignores-return",
+        "limits": [
+          "The proposed consumer regression has no executed baseline or fixed-run evidence."
+        ],
+        "next_operation": "Have the host run the consumer regression against the original caller, apply the direct return and rerun the regression.",
+        "owner_message": ""
+      },
+      {
+        "artifact": "Proposed call-site change. Apply the existing update_patch to the original material and the evaluate response, using the helper's existing signature and mutation or return convention. Feed the patched material to the normal consumer. Exercise two cases. For {originGroup:'B', discount:0, note:null} applied to {Number:'M7', originGroup:'A', discount:17, note:'keep'}, expect {Number:'M7', originGroup:'B', discount:0, note:null}. For {originGroup:'B'} applied to the same starting material, expect Number, discount and note to retain their original values.",
+        "decision": "Reuse update_patch. Replacing the full material with the v3 patch drops immutable Number and violates the omission rule.",
+        "evidence": [
+          "The v3 contract defines omitted fields as unchanged, explicit null as clearing, and Number as immutable.",
+          "The captured patch omits Number, includes a zero discount and explicitly clears note.",
+          "The supplied fixture states that the existing helper handles omission and null correctly."
+        ],
+        "id": "partial-response-contract",
+        "limits": [
+          "The packet omits the helper signature and its return or mutation convention.",
+          "No executed integration checks establish baseline failure or corrected behavior for either case."
+        ],
+        "next_operation": "Have the host confirm the helper's calling convention, replace wholesale assignment at the integration boundary and run both consumer cases against the baseline and correction.",
+        "owner_message": ""
+      },
+      {
+        "artifact": "Candidate DTO mapping change: `number <- source['materialNumber']` becomes `number <- source['Number']`. Feed sanitized v2 wire JSON containing Number=M7 and the captured OriginGroup and Discount values through the actual deserializer and normal caller. Assert that Reply.number is M7 and that the consumer receives the other captured values unchanged. Capture a failing Number assertion with the old mapping and a passing run with the corrected mapping.",
+        "decision": "The first observed divergence is response deserialization. Correct the v2 field binding and preserve the caller's existing use of Reply.",
+        "evidence": [
+          "Number is M7 in the request object, outgoing JSON and raw response. Reply.number is None.",
+          "The DTO reads materialNumber, while the published v2 response field is Number.",
+          "The caller already returns Reply."
+        ],
+        "id": "serialization-loss",
+        "limits": [
+          "The proposed mapping change and consumer regression have no supplied execution evidence."
+        ],
+        "next_operation": "Have the host record the consumer regression on the old mapping, change the v2 mapping and rerun the same regression.",
+        "owner_message": ""
+      },
+      {
+        "artifact": "Proposed local probe. Send one sanitized fixture with a known Number through the real caller and serializer using a controlled response. Record the decoded reply and the material handed to the downstream consumer, with the raw fixture as the comparison point. If Number is present in the fixture and missing from the decoded reply, inspect DTO binding. If the decoded reply preserves Number and the consumer loses it, inspect the caller's return and mapping path. If both preserve it, record that this fixture did not reproduce the symptom.",
+        "decision": "UNVERIFIED cause. The workaround test alone cannot confirm a causal repair. Continue with the available local probe. No owner decision is needed.",
+        "evidence": [
+          "The fixture supplies symptom logs and a workaround test.",
+          "Caller and serializer source are available locally, and the controlled probe has not run."
+        ],
+        "id": "unknown-useful-probe",
+        "limits": [
+          "No trace establishes the first divergence.",
+          "Production access is unavailable and production reproduction is outside the authorized scope."
+        ],
+        "next_operation": "Have the host run the non-destructive local probe and retain the boundary observations before selecting a correction.",
+        "owner_message": ""
+      },
+      {
+        "artifact": "Internal decision record. Hold the integration change pending the authoritative response contract for the target endpoint. A complete Material supports returning the response. A partial patch requires applying its documented field semantics to the original material. After the decision, derive a consumer regression from the confirmed contract and record baseline and corrected results.",
+        "decision": "BLOCKED on the target endpoint's response semantics. Both API versions are plausible, and the helper whitelist has no established authority.",
+        "evidence": [
+          "Authorized repository and history searches found no authoritative field semantics.",
+          "The remote contract and response capture are unavailable.",
+          "The fixture describes two legitimate API versions with different handling for omitted fields."
+        ],
+        "id": "missing-contract",
+        "limits": [
+          "No supplied evidence binds the target endpoint to either version or establishes the meaning of omission.",
+          "The fixture identifies no remaining authorized source that can resolve the contract gap."
+        ],
+        "next_operation": "Route the contract decision to the owner and hold the affected integration change until the governing semantics are confirmed.",
+        "owner_message": "The repository and history searches found no authoritative field semantics. The remote contract and response capture are unavailable.\nMy unconfirmed hypothesis is that omitted fields should be preserved because the endpoint returns a patch. I recommend confirming the endpoint contract before changing the caller, since choosing the wrong behavior can drop data.\nShould this integration treat the target response as a complete Material or as a partial patch?"
+      }
+    ],
+    "semantic_verdict": "No automatic semantic PASS. Complete individual outputs are supplied for independent interpretation in the mapped native command.",
+    "limitation": "No quantified behavioral improvement, production execution or generalized success-rate claim."
+  },
+  "measured_provider_usage": {
+    "input_tokens": 711649,
+    "cached_input_tokens": 44672,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 4703,
+    "reasoning_output_tokens": 0
+  },
+  "limitations": [
+    "Raw immutable receipts/logs remain on the executing computer; this compact public record is not a portable signed attestation.",
+    "Semantic causality and test adequacy require independent judgment; structural checks alone cannot establish them.",
+    "Claude/Copilot live execution was not performed; shared schema/instructions/assets use their existing adapters.",
+    "Successful cited-case identity currently recognizes verbose unittest and pytest output. Aggregate-only or unsupported runners need an execution-evidence adapter; they are not silently accepted.",
+    "Generic large-context transport work remains paused. Task-local lossless views were used for this source acceptance; they are not a deployed general context optimizer."
+  ],
+  "measured_provider_usage_scope": "Consumer-chain sessions only; recorded counters are measurements, not estimates or savings."
+}

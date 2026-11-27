@@ -1,0 +1,79 @@
+# Reusable merge check. Copy into a protected repository (for example .github/workflows/) and
+# call it from the product repository's pull_request workflow. Require the calling job in branch
+# protection / rulesets; without that requirement this job only reports.
+#
+# The framework is checked out from a pinned commit of a trusted repository, never from the
+# pull request branch, so the change under review cannot alter the rules that judge it.
+name: ase-merge-check
+
+on:
+  workflow_call:
+    inputs:
+      framework_repository:
+        description: owner/name of the trusted DevelopmentFramework copy
+        type: string
+        required: true
+      framework_ref:
+        description: full commit SHA of the trusted framework (not a branch name)
+        type: string
+        required: true
+      max_lines:
+        type: number
+        default: 2000
+      max_files:
+        type: number
+        default: 60
+      test_command:
+        description: optional project test command, run without secrets
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  ase-ci-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout change under review
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          path: project
+      - name: Checkout pinned trusted framework
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.framework_repository }}
+          ref: ${{ inputs.framework_ref }}
+          persist-credentials: false
+          path: framework
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Deterministic merge checks
+        # Explicit bash runs with -eo pipefail, so a failing ci-check is not hidden behind tee.
+        shell: bash
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          # Owner overrides are PR labels. Restrict who may label (triage rights) or replace this
+          # with a required CODEOWNERS review if labels are not trusted in your organisation.
+          ALLOW_PROTECTED: ${{ contains(github.event.pull_request.labels.*.name, 'ase:allow-protected') }}
+          ALLOW_LARGE: ${{ contains(github.event.pull_request.labels.*.name, 'ase:allow-large') }}
+          ALLOW_TEST_REMOVAL: ${{ contains(github.event.pull_request.labels.*.name, 'ase:allow-test-removal') }}
+          ALLOW_TEST_SKIP: ${{ contains(github.event.pull_request.labels.*.name, 'ase:allow-test-skip') }}
+        run: |
+          set -euo pipefail
+          flags=""
+          if [ "$ALLOW_PROTECTED" = "true" ]; then flags="$flags --allow-protected"; fi
+          if [ "$ALLOW_LARGE" = "true" ]; then flags="$flags --allow-large"; fi
+          if [ "$ALLOW_TEST_REMOVAL" = "true" ]; then flags="$flags --allow-test-removal"; fi
+          if [ "$ALLOW_TEST_SKIP" = "true" ]; then flags="$flags --allow-test-skip"; fi
+          PYTHONPATH="$GITHUB_WORKSPACE/framework" python -m ase --repo "$GITHUB_WORKSPACE/project" ci-check \
+            --base "origin/$BASE_REF" --max-lines ${{ inputs.max_lines }} --max-files ${{ inputs.max_files }} --text $flags \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Project tests
+        if: ${{ inputs.test_command != '' }}
+        working-directory: project
+        run: ${{ inputs.test_command }}

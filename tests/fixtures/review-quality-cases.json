@@ -1,0 +1,748 @@
+{
+  "cases": [
+    {
+      "id": "invoice-amount",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "An invoice payment cannot be applied in FAST. Restore the shared invoice behavior so an approved invoice and its payment can be settled. Preserve the shared billing contract.",
+        "scope": {
+          "resources": [
+            "src",
+            "test_artifact.py"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "A 1099-cent invoice with a 100-cent payment has 999 cents remaining.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/mre.py": "def quote(total_cents):\n    return {\"total_cents\": str(total_cents), \"currency\": \"USD\"}\n",
+        "src/fast.py": "def balance(quote, paid_cents):\n    return quote[\"total_cents\"] - paid_cents\n",
+        "src/ap_ledger.py": "def amount_to_post(quote):\n    if type(quote[\"total_cents\"]) is not int:\n        raise ValueError(\"expected integer cents\")\n    return quote[\"total_cents\"]\n",
+        "invoice-contract.md": "MRE emits a single invoice quote to FAST and Accounts Payable. total_cents is an integer count of minor currency units. currency is an ISO code. The active Accounts Payable client rejects a string amount.",
+        "test_artifact.py": "import unittest\n\nfrom src.settlement import apply_payment\n\n\nclass InvoicePaymentTests(unittest.TestCase):\n    def test_payment(self):\n        self.assertEqual(apply_payment(1099, 100), 999)\n",
+        "src/settlement.py": "from src.ap_ledger import amount_to_post\nfrom src.fast import balance\nfrom src.mre import quote\n\n\ndef apply_payment(total_cents, paid_cents):\n    return balance(quote(total_cents), paid_cents)\n\n\ndef post_invoice(total_cents):\n    return amount_to_post(quote(total_cents))\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/mre.py": "def quote(total_cents):\n    return {\"total_cents\": total_cents, \"currency\": \"USD\"}\n",
+            "test_artifact.py": "import unittest\n\nfrom src.settlement import apply_payment, post_invoice\n\n\nclass InvoicePaymentTests(unittest.TestCase):\n    def test_payment(self):\n        self.assertEqual(apply_payment(1099, 100), 999)\n\n    def test_the_same_invoice_posts_to_accounts_payable(self):\n        self.assertEqual(post_invoice(1099), 1099)\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "MRE constructs the violating response. This restores the integer contract for FAST and Accounts Payable."
+          }
+        },
+        {
+          "changes": {
+            "src/fast.py": "def balance(quote, paid_cents):\n    return int(quote[\"total_cents\"]) - paid_cents\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "FAST conversion masks the producer defect and leaves Accounts Payable broken. Cite the wire contract and caller."
+          }
+        }
+      ]
+    },
+    {
+      "id": "dispatch-recipient",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "The onboarding reminder includes surrounding spaces and mixed case in the recipient address. Make it follow the project's notification email convention. Preserve other notification behavior.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "The reminder uses the canonical email address and leaves an already canonical address unchanged.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/reminder.py": "def recipient(profile):\n    return profile[\"notification_email\"]\n",
+        "src/notification_address.py": "def notification_email(value):\n    return value.strip().lower()\n",
+        "src/application_notice.py": "from src.notification_address import notification_email\n\n\ndef send_to(profile):\n    return notification_email(profile[\"notification_email\"])\n",
+        "test_artifact.py": "import unittest\n\nfrom src.onboarding import send_reminder\n\n\nclass ReminderRecipientTests(unittest.TestCase):\n    def test_recipient(self):\n        outbox = []\n        send_reminder({'notification_email': '  A@Example.org '}, outbox)\n        send_reminder({'notification_email': 'b@example.org'}, outbox)\n        self.assertEqual(outbox, [('a@example.org', 'onboarding'), ('b@example.org', 'onboarding')])\n",
+        "src/onboarding.py": "from src.reminder import recipient\n\n\ndef send_reminder(profile, outbox):\n    outbox.append((recipient(profile), 'onboarding'))\n",
+        "notifications-contract.md": "Both onboarding and application notices receive a validated profile. notification_email always exists and is a string. Unvalidated and null addresses are excluded before these notification flows. Leading and trailing spaces and case differences are normalized with the shared notification address rule.\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/reminder.py": "from src.reminder_address import normalize_recipient\n\n\ndef recipient(profile):\n    return normalize_recipient(profile[\"notification_email\"])\n",
+            "src/reminder_address.py": "def normalize_recipient(value):\n    return value.strip().lower()\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "The new helper duplicates the existing notification_address.notification_email already used by application_notice."
+          }
+        },
+        {
+          "changes": {
+            "src/reminder.py": "from src.notification_address import notification_email\n\n\ndef recipient(profile):\n    return notification_email(profile[\"notification_email\"])\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Reuse the existing notification address behavior at the reminder boundary."
+          }
+        }
+      ]
+    },
+    {
+      "id": "open-receivables",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Correct the outstanding receivables total so paid entries do not contribute. Deliver the total fix in the current task.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "Open entries contribute to outstanding and paid entries stay excluded.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/receivables.py": "def outstanding(rows):\n    return sum(row[\"cents\"] for row in rows)\n",
+        "src/csv_export.py": "def headers():\n    return (\"Invoice Number\", \"Balance\")\n",
+        "test_artifact.py": "import unittest\n\nfrom src.summary import report\n\n\nclass OutstandingReceivablesTests(unittest.TestCase):\n    def test_status_filter(self):\n        rows = [{'cents': 900, 'status': 'open'}, {'cents': 1400, 'status': 'paid'}]\n        self.assertEqual(report(rows), {'outstanding_cents': 900})\n",
+        "receivables-contract.md": "The public outstanding report receives billing rows. Each row always includes cents (integer minor units) and status. Current and historical statuses are open or paid. The report sums open entries. Export header names are a separate consumer contract.\n",
+        "src/summary.py": "from src.receivables import outstanding\n\n\ndef report(rows):\n    return {'outstanding_cents': outstanding(rows)}\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/receivables.py": "def outstanding(rows):\n    return sum(row[\"cents\"] for row in rows if row[\"status\"] == \"open\")\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Only the accepted outstanding total behavior changes."
+          }
+        },
+        {
+          "changes": {
+            "src/receivables.py": "def outstanding(rows):\n    return sum(row[\"cents\"] for row in rows if row[\"status\"] == \"open\")\n",
+            "src/csv_export.py": "def headers():\n    return (\"Invoice ID\", \"Subtotal\")\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "CSV header changes affect an unrelated export contract. Broad file scope does not authorize the behavior."
+          }
+        }
+      ]
+    },
+    {
+      "id": "shipment-ledger-event",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Support the documented shipment.cancelled event in the existing warehouse event dispatcher. Record cancellation through the ledger while preserving shipment.received. Follow the existing one-event handler pattern.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "The dispatcher records cancelled and received shipment events with their respective event IDs.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/dispatcher.py": "from src.received import receipt\n\n\nHANDLERS = {\"shipment.received\": receipt}\n\n\ndef route(message, ledger):\n    HANDLERS[message[\"kind\"]](message, ledger)\n",
+        "src/received.py": "def receipt(message, ledger):\n    ledger.append((message[\"id\"], \"received\"))\n",
+        "warehouse-events.md": "Each externally documented shipment event is registered once in the dispatcher and has a handler under src. shipment.cancelled carries the same id and calls the ledger with status cancelled. shipment.received keeps its existing status. Unknown event kinds are rejected by the dispatcher.",
+        "test_artifact.py": "from pathlib import Path\nimport tempfile\nimport unittest\n\nfrom src.ledger import Ledger\nfrom src.warehouse import receive\n\n\nclass WarehouseLedgerTests(unittest.TestCase):\n    def setUp(self):\n        directory = tempfile.TemporaryDirectory()\n        self.addCleanup(directory.cleanup)\n        self.ledger_file = Path(directory.name) / 'ledger.db'\n\n    def test_registered_events(self):\n        receive([{'kind': 'shipment.received', 'id': 's1'},\n                 {'kind': 'shipment.cancelled', 'id': 's2'}], self.ledger_file)\n        self.assertEqual(Ledger(self.ledger_file).entries(), [('s1', 'received'), ('s2', 'cancelled')])\n\n    def test_unknown_event_keeps_the_ledger_empty(self):\n        with self.assertRaises(KeyError):\n            receive([{'kind': 'unknown', 'id': 's3'}], self.ledger_file)\n        self.assertEqual(Ledger(self.ledger_file).entries(), [])\n",
+        "src/ledger.py": "from contextlib import closing\nimport sqlite3\n\n\nclass Ledger:\n    def __init__(self, path):\n        self.path = path\n        with closing(sqlite3.connect(path)) as db, db:\n            db.execute('CREATE TABLE IF NOT EXISTS events (id TEXT, status TEXT)')\n\n    def append(self, record):\n        with closing(sqlite3.connect(self.path)) as db, db:\n            db.execute('INSERT INTO events VALUES (?, ?)', record)\n\n    def entries(self):\n        with closing(sqlite3.connect(self.path)) as db:\n            return db.execute('SELECT id, status FROM events ORDER BY rowid').fetchall()\n",
+        "src/warehouse.py": "from src.dispatcher import route\nfrom src.ledger import Ledger\n\n\ndef receive(messages, ledger_path):\n    ledger = Ledger(ledger_path)\n    for message in messages:\n        route(message, ledger)\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/dispatcher.py": "from src.received import receipt\n\n\nHANDLERS = {\"shipment.received\": receipt}\n\n\ndef route(message, ledger):\n    if message[\"kind\"] == \"shipment.cancelled\":\n        ledger.append((message[\"id\"], \"cancelled\"))\n        return\n    HANDLERS[message[\"kind\"]](message, ledger)\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "Dispatcher bypasses the documented registration and one-event handler boundary."
+          }
+        },
+        {
+          "changes": {
+            "src/dispatcher.py": "from src.cancelled import cancellation\nfrom src.received import receipt\n\n\nHANDLERS = {\"shipment.received\": receipt, \"shipment.cancelled\": cancellation}\n\n\ndef route(message, ledger):\n    HANDLERS[message[\"kind\"]](message, ledger)\n",
+            "src/cancelled.py": "def cancellation(message, ledger):\n    ledger.append((message[\"id\"], \"cancelled\"))\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "A new handler follows the documented current pattern and fulfills the new event requirement without a new architectural mechanism."
+          }
+        }
+      ]
+    },
+    {
+      "id": "quote-unavailable-mapping",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "When the rate provider is unavailable (the rate client raises RateProviderUnavailable), the quote endpoint must answer 503 with the machine-readable code provider_unavailable. Other responses stay as they are.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "RateProviderUnavailable yields status 503 with code provider_unavailable; a successful fetch still returns 200.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/errors.py": "class NotFound(Exception):\n    pass\n\n\nclass Conflict(Exception):\n    pass\n\n\nclass RateProviderUnavailable(Exception):\n    \"\"\"The rate provider did not answer in time.\"\"\"\n",
+        "src/api_base.py": "from src.errors import Conflict, NotFound\n\n\ndef problem(error):\n    if isinstance(error, NotFound):\n        return {\"status\": 404, \"code\": \"not_found\"}\n    if isinstance(error, Conflict):\n        return {\"status\": 409, \"code\": \"conflict\"}\n    return {\"status\": 500, \"code\": \"internal\"}\n\n\ndef handle(action):\n    try:\n        return {\"status\": 200, \"body\": action()}\n    except Exception as error:\n        return problem(error)\n",
+        "src/quotes.py": "from src.api_base import handle\n\n\ndef get_quote(provider):\n    return handle(provider.fetch)\n",
+        "src/orders.py": "from src.api_base import handle\n\n\ndef get_order(store, order_id):\n    return handle(lambda: store.load(order_id))\n",
+        "api-errors.md": "Every endpoint returns its result through api_base.handle. api_base.problem is the single mapping from exceptions to the status and machine-readable code clients rely on; a new error code is added there.\n",
+        "test_artifact.py": "import unittest\n\nfrom src.quotes import get_quote\nfrom src.rates import RateClient\n\n\nclass Transport:\n    def __init__(self, error=None):\n        self.error = error\n\n    def get(self, path):\n        if self.error:\n            raise self.error\n        return {\"rate\": 2}\n\n\nclass QuoteTests(unittest.TestCase):\n    def test_unavailable_provider(self):\n        self.assertEqual(get_quote(RateClient(Transport(TimeoutError()))),\n                         {\"status\": 503, \"code\": \"provider_unavailable\"})\n\n    def test_success_is_unchanged(self):\n        self.assertEqual(get_quote(RateClient(Transport())), {\"status\": 200, \"body\": {\"rate\": 2}})\n",
+        "src/rates.py": "from src.errors import RateProviderUnavailable\n\n\nclass RateClient:\n    def __init__(self, transport):\n        self.transport = transport\n\n    def fetch(self):\n        try:\n            return self.transport.get(\"/rate\")\n        except TimeoutError as error:\n            raise RateProviderUnavailable() from error\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/result.py": "class Result:\n    def __init__(self, value=None, error=None):\n        self.value, self.error = value, error\n\n    @classmethod\n    def capture(cls, action):\n        try:\n            return cls(value=action())\n        except Exception as error:\n            return cls(error=error)\n",
+            "src/quotes.py": "from src.api_base import handle\nfrom src.errors import RateProviderUnavailable\nfrom src.result import Result\n\n\ndef _unavailable_problem():\n    return {\"status\": 503, \"code\": \"provider_unavailable\"}\n\n\ndef _fetch(provider):\n    return provider.fetch()\n\n\ndef get_quote(provider):\n    result = Result.capture(lambda: _fetch(provider))\n    if isinstance(result.error, RateProviderUnavailable):\n        return _unavailable_problem()\n    return handle(lambda: result.value if result.error is None else _fetch(provider))\n",
+            "src/IMPLEMENTATION_NOTES.md": "Quote unavailability: handled locally in quotes.py through a small Result wrapper, so no shared API behavior is modified. Reviewed earlier and accepted.\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "A parallel Result wrapper and endpoint-local problem builder re-implement the existing api_base.problem mapping; the note's \"no shared behavior is modified\" is a claim, not a reason. Add the RateProviderUnavailable case there."
+          }
+        },
+        {
+          "changes": {
+            "src/api_base.py": "from src.errors import Conflict, NotFound, RateProviderUnavailable\n\n\ndef problem(error):\n    if isinstance(error, NotFound):\n        return {\"status\": 404, \"code\": \"not_found\"}\n    if isinstance(error, Conflict):\n        return {\"status\": 409, \"code\": \"conflict\"}\n    if isinstance(error, RateProviderUnavailable):\n        return {\"status\": 503, \"code\": \"provider_unavailable\"}\n    return {\"status\": 500, \"code\": \"internal\"}\n\n\ndef handle(action):\n    try:\n        return {\"status\": 200, \"body\": action()}\n    except Exception as error:\n        return problem(error)\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Adds one case for the domain exception at the documented exception-to-response mapping."
+          }
+        }
+      ]
+    },
+    {
+      "id": "directory-card-dead-catch",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "A profile card for a directory entry that is missing or cannot be reached shows \"Unknown\" instead of failing. Found entries keep their name.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "Missing and unreachable entries show Unknown; a found entry shows its name.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/directory.py": "def lookup(client, key):\n    try:\n        return client.get(key)\n    except Exception:\n        return None\n",
+        "src/profile_card.py": "from src.directory import lookup\n\n\ndef card(client, key):\n    user = lookup(client, key)\n    return {\"name\": user[\"name\"]}\n",
+        "test_artifact.py": "import unittest\n\nfrom src.profile_card import card\n\n\nclass Client:\n    def __init__(self, users=None, error=None):\n        self.users, self.error = users or {}, error\n\n    def get(self, key):\n        if self.error:\n            raise self.error\n        return self.users.get(key)\n\n\nclass CardTests(unittest.TestCase):\n    def test_unreachable_directory(self):\n        self.assertEqual(card(Client(error=ConnectionError()), \"a\"), {\"name\": \"Unknown\"})\n\n    def test_missing_entry(self):\n        self.assertEqual(card(Client(), \"a\"), {\"name\": \"Unknown\"})\n\n    def test_found_entry(self):\n        self.assertEqual(card(Client({\"a\": {\"name\": \"Ada\"}}), \"a\"), {\"name\": \"Ada\"})\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/profile_card.py": "from src.directory import lookup\n\n\ndef card(client, key):\n    try:\n        user = lookup(client, key)\n    except ConnectionError:\n        return {\"name\": \"Unknown\"}\n    if user is None:\n        return {\"name\": \"Unknown\"}\n    return {\"name\": user[\"name\"]}\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "directory.lookup swallows every exception and returns None, so the ConnectionError handler can never run; remove the dead catch."
+          }
+        },
+        {
+          "changes": {
+            "src/profile_card.py": "from src.directory import lookup\n\n\ndef card(client, key):\n    user = lookup(client, key)\n    if user is None:\n        return {\"name\": \"Unknown\"}\n    return {\"name\": user[\"name\"]}\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Handles the None that lookup actually returns for both missing and unreachable entries."
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync-time-format",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "The sync status shows the last sync time as raw Python text. Show it in the project's user-facing UTC timestamp format.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "A sync at 2026-03-05 16:30 +02:00 is shown as 2026-03-05 14:30 UTC.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/formats.py": "from datetime import timezone\n\nUSER_TIMESTAMP = \"%Y-%m-%d %H:%M UTC\"\nUSER_DATE = \"%Y-%m-%d\"\n\n\ndef user_timestamp(moment):\n    return moment.astimezone(timezone.utc).strftime(USER_TIMESTAMP)\n\n\ndef user_date(moment):\n    return moment.astimezone(timezone.utc).strftime(USER_DATE)\n",
+        "src/invoice_view.py": "from src.formats import user_timestamp\n\n\ndef issued_label(invoice):\n    return \"Issued \" + user_timestamp(invoice[\"issued_at\"])\n",
+        "src/sync_status.py": "def last_sync(moment):\n    return \"Last sync \" + str(moment)\n",
+        "test_artifact.py": "import unittest\nfrom datetime import datetime, timedelta, timezone\n\nfrom src.sync_status import last_sync\n\n\nclass SyncStatusTests(unittest.TestCase):\n    def test_utc_label(self):\n        moment = datetime(2026, 3, 5, 16, 30, tzinfo=timezone(timedelta(hours=2)))\n        self.assertEqual(last_sync(moment), \"Last sync 2026-03-05 14:30 UTC\")\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/sync_format.py": "from datetime import timezone\n\n\ndef format_sync_time(moment):\n    return moment.astimezone(timezone.utc).strftime(\"%Y-%m-%d %H:%M UTC\")\n",
+            "src/sync_status.py": "from src.sync_format import format_sync_time\n\n\ndef last_sync(moment):\n    return \"Last sync \" + format_sync_time(moment)\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "The new helper re-implements formats.user_timestamp and its USER_TIMESTAMP format; use the existing helper."
+          }
+        },
+        {
+          "changes": {
+            "src/sync_status.py": "from src.formats import user_timestamp\n\n\ndef last_sync(moment):\n    return \"Last sync \" + user_timestamp(moment)\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Reuses the existing user-facing UTC timestamp helper."
+          }
+        }
+      ]
+    },
+    {
+      "id": "provider-invalid-payload",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Importing an account crashes when the provider returns a malformed or empty account payload. The import must return an error result instead of crashing. Connection failures keep their current message.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "A malformed or empty account payload yields an error result; a valid account still imports.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/provider_client.py": "class ProviderClient:\n    def __init__(self, http):\n        self.http = http\n\n    def get_account(self, account_id):\n        response = self.http.get(\"/accounts/\" + account_id)\n        response.raise_for_status()\n        return response.json()\n\n    def list_items(self, account_id):\n        response = self.http.get(\"/accounts/\" + account_id + \"/items\")\n        response.raise_for_status()\n        return response.json()\n\n    def get_rate(self, currency):\n        response = self.http.get(\"/rates/\" + currency)\n        response.raise_for_status()\n        return response.json()\n\n    def get_owner(self, account_id):\n        response = self.http.get(\"/accounts/\" + account_id + \"/owner\")\n        response.raise_for_status()\n        return response.json()\n",
+        "src/import_handler.py": "RECONNECT = \"Connection unavailable, please reconnect\"\n\n\ndef import_account(client, account_id):\n    try:\n        account = client.get_account(account_id)\n    except ConnectionError:\n        return {\"status\": \"error\", \"message\": RECONNECT}\n    return {\"status\": \"ok\", \"id\": account[\"id\"]}\n",
+        "test_artifact.py": "import unittest\n\nfrom src.import_handler import import_account\nfrom src.provider_client import ProviderClient\n\n\nclass Response:\n    def __init__(self, body):\n        self.body = body\n\n    def raise_for_status(self):\n        pass\n\n    def json(self):\n        if isinstance(self.body, Exception):\n            raise self.body\n        return self.body\n\n\nclass Http:\n    def __init__(self, body):\n        self.body = body\n\n    def get(self, path):\n        return Response(self.body)\n\n\nclass ImportTests(unittest.TestCase):\n    def run_import(self, body):\n        return import_account(ProviderClient(Http(body)), \"a1\")\n\n    def test_malformed_payload(self):\n        self.assertEqual(self.run_import(ValueError(\"bad json\"))[\"status\"], \"error\")\n\n    def test_empty_payload(self):\n        self.assertEqual(self.run_import({})[\"status\"], \"error\")\n\n    def test_valid_account(self):\n        self.assertEqual(self.run_import({\"id\": \"a1\"}), {\"status\": \"ok\", \"id\": \"a1\"})\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/provider_client.py": "class ProviderClient:\n    def __init__(self, http):\n        self.http = http\n\n    def _send(self, path):\n        return self.http.get(path)\n\n    def _ensure_success(self, response):\n        response.raise_for_status()\n        return response\n\n    def _read_json(self, response):\n        try:\n            return response.json()\n        except ValueError as error:\n            raise ConnectionError(\"provider unavailable\") from error\n\n    def _read_id(self, payload):\n        if not payload or \"id\" not in payload:\n            raise ConnectionError(\"provider unavailable\")\n        return payload\n\n    def get_account(self, account_id):\n        response = self._ensure_success(self._send(\"/accounts/\" + account_id))\n        return self._read_id(self._read_json(response))\n\n    def list_items(self, account_id):\n        response = self.http.get(\"/accounts/\" + account_id + \"/items\")\n        response.raise_for_status()\n        return response.json()\n\n    def get_rate(self, currency):\n        response = self.http.get(\"/rates/\" + currency)\n        response.raise_for_status()\n        return response.json()\n\n    def get_owner(self, account_id):\n        response = self.http.get(\"/accounts/\" + account_id + \"/owner\")\n        response.raise_for_status()\n        return response.json()\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "Malformed data is reported as \"Connection unavailable, please reconnect\", and four private wrappers in the shared client serve one method, leaving two styles; classify once in import_account."
+          }
+        },
+        {
+          "changes": {
+            "src/import_handler.py": "RECONNECT = \"Connection unavailable, please reconnect\"\nINVALID_DATA = \"The provider returned invalid account data\"\n\n\ndef import_account(client, account_id):\n    try:\n        account = client.get_account(account_id)\n        return {\"status\": \"ok\", \"id\": account[\"id\"]}\n    except ConnectionError:\n        return {\"status\": \"error\", \"message\": RECONNECT}\n    except (ValueError, KeyError, TypeError):\n        return {\"status\": \"error\", \"message\": INVALID_DATA}\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Classifies invalid provider data at the one handler boundary with a message naming the real cause."
+          }
+        }
+      ]
+    },
+    {
+      "id": "portal-link-placeholder",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Add a portal_link placeholder to the deal message builder. It renders the deal page in the portal: the portal base URL followed by /deals/ and the deal ID.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "portal_link for deal 42 renders https://portal.example/deals/42; existing placeholders are unchanged.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/settings.py": "PORTAL_BASE_URL = \"https://portal.example\"\n",
+        "src/money.py": "def format_amount(cents):\n    return f\"{cents // 100}.{cents % 100:02d}\"\n",
+        "src/placeholders.py": "from src.settings import PORTAL_BASE_URL\nfrom src.money import format_amount\n\n\ndef placeholder(name, deal):\n    if name == \"customer\":\n        return deal[\"customer_name\"]\n    if name == \"amount\":\n        return format_amount(deal[\"amount_cents\"])\n    if name == \"agent\":\n        return deal[\"agent_name\"]\n    raise KeyError(name)\n",
+        "test_artifact.py": "import unittest\n\nfrom src.placeholders import placeholder\n\nDEAL = {\"id\": 42, \"customer_name\": \"Ada\", \"amount_cents\": 1099, \"agent_name\": \"Lin\"}\n\n\nclass PlaceholderTests(unittest.TestCase):\n    def test_portal_link(self):\n        self.assertEqual(placeholder(\"portal_link\", DEAL), \"https://portal.example/deals/42\")\n\n    def test_existing(self):\n        self.assertEqual([placeholder(n, DEAL) for n in (\"customer\", \"amount\", \"agent\")], [\"Ada\", \"10.99\", \"Lin\"])\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/placeholders.py": "import html\n\nfrom src.settings import PORTAL_BASE_URL\nfrom src.money import format_amount\n\n\ndef placeholder(name, deal):\n    if name == \"customer\":\n        return deal[\"customer_name\"]\n    if name == \"amount\":\n        return format_amount(deal[\"amount_cents\"])\n    if name == \"agent\":\n        return deal[\"agent_name\"]\n    if name == \"portal_link\":\n        if deal is None:\n            return \"Link unavailable\"\n        deal_id = deal.get(\"id\") or \"unknown\"\n        base = (PORTAL_BASE_URL or \"\").rstrip(\"/\")\n        return html.escape(f\"{base}/deals/{deal_id}\")\n    raise KeyError(name)\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "Only the new case HTML-encodes, adds fallbacks, a hardcoded English string, URL trimming and a null guard; none of its siblings do and nothing on the base branch triggers them."
+          }
+        },
+        {
+          "changes": {
+            "src/placeholders.py": "from src.settings import PORTAL_BASE_URL\nfrom src.money import format_amount\n\n\ndef placeholder(name, deal):\n    if name == \"customer\":\n        return deal[\"customer_name\"]\n    if name == \"amount\":\n        return format_amount(deal[\"amount_cents\"])\n    if name == \"agent\":\n        return deal[\"agent_name\"]\n    if name == \"portal_link\":\n        return f\"{PORTAL_BASE_URL}/deals/{deal['id']}\"\n    raise KeyError(name)\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "The new case follows its siblings."
+          }
+        }
+      ]
+    },
+    {
+      "id": "note-can-edit",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "The note response must include a server-computed can_edit flag: true for the note owner, false for everyone else. Preserve who may read notes.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "The owner receives can_edit true; an admin reader receives can_edit false; other users are still refused.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/notes_api.py": "def can_read(note, user):\n    return user[\"id\"] == note[\"owner_id\"] or user[\"role\"] == \"admin\"\n\n\ndef get_note(note, user):\n    if not can_read(note, user):\n        raise PermissionError(\"note\")\n    return {\"id\": note[\"id\"], \"text\": note[\"text\"]}\n",
+        "test_artifact.py": "import unittest\n\nfrom src.notes_api import get_note\n\nNOTE = {\"id\": 7, \"owner_id\": 1, \"team\": \"ops\", \"text\": \"Call back\"}\n\n\nclass NoteTests(unittest.TestCase):\n    def test_owner_can_edit(self):\n        self.assertTrue(get_note(NOTE, {\"id\": 1, \"role\": \"member\", \"team\": \"ops\"})[\"can_edit\"])\n\n    def test_admin_reads_without_edit(self):\n        self.assertEqual(get_note(NOTE, {\"id\": 9, \"role\": \"admin\", \"team\": \"hq\"}),\n                         {\"id\": 7, \"text\": \"Call back\", \"can_edit\": False})\n\n    def test_stranger_is_refused(self):\n        with self.assertRaises(PermissionError):\n            get_note(NOTE, {\"id\": 5, \"role\": \"member\", \"team\": \"sales\"})\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/notes_api.py": "def can_read(note, user):\n    if user.get(\"channel\") == \"api\" and user[\"role\"] != \"admin\":\n        return False\n    return (user[\"id\"] == note[\"owner_id\"] or user[\"role\"] == \"admin\"\n            or user.get(\"team\") == note[\"team\"] and user[\"role\"] == \"lead\")\n\n\ndef show_details(note, user):\n    return user[\"id\"] == note[\"owner_id\"] or user[\"role\"] == \"admin\"\n\n\ndef get_note(note, user):\n    if not can_read(note, user):\n        raise PermissionError(\"note\")\n    view = {\"id\": note[\"id\"], \"text\": note[\"text\"] if show_details(note, user) else None,\n            \"can_edit\": user[\"id\"] == note[\"owner_id\"]}\n    return view\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "Beyond can_edit, the change lets team leads read notes, adds a details-visibility flag and an API-channel condition; none is in the ticket and each is an owner decision about access."
+          }
+        },
+        {
+          "changes": {
+            "src/notes_api.py": "def can_read(note, user):\n    return user[\"id\"] == note[\"owner_id\"] or user[\"role\"] == \"admin\"\n\n\ndef get_note(note, user):\n    if not can_read(note, user):\n        raise PermissionError(\"note\")\n    return {\"id\": note[\"id\"], \"text\": note[\"text\"], \"can_edit\": user[\"id\"] == note[\"owner_id\"]}\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Adds only the requested server-computed flag."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+# Blocking P2 and bounded automatic correction
+
+Policy: P0/P1/P2 reject gate approval; P3 remains advisory. The same gate is used before local publishing. Review prompts, generated skills and native agent instructions carry this policy. Historical audits mentioning nonblocking P2 describe the previous policy and are not current instructions.
+
+The trusted CLI run/resume controller automatically sends actual check/AC/review findings to a delegated implementer, runs tests after its source changes, and creates new separate read-only AC/review sessions. Current-source receipts are mandatory; previous PASS or a severity downgrade cannot substitute for fresh verification. Missing infrastructure or scope/authorization uncertainty stops the workflow; max_attempts persists across resume. Exhaustion remains unapproved. A pending final-attempt check/review can finish without granting another implementation attempt.
+
+Each completed controller cycle stores original receipts, handoff and logs in tasks/<id>/cycles/<attempt>-<uuid> with a SHA256 manifest. Existing verbose retention applies, preserving structured history. This is accidental-error reliability, not hostile same-user tamper protection. The host MCP still exposes only verification_start/status; no host-side implementation/test/publish API was added. In a chat the agent uses the existing sandbox tools plus fresh MCP verification in the analogous bounded loop. Direct nested CLI verification inside the restricted tool sandbox remains prohibited.
+
+## Native end-to-end evidence
+
+The disposable preview fixture in outputs/p2-cycle-live starts with a genuine UTF-8 character-boundary defect. The initial real check executed5 tests, all PASS; independent native AC also PASS. A separate native reviewer reproduced preview('é',1) raising UnicodeDecodeError and independently classified the noncritical display defect P2. Gate REJECTED solely that P2 (initial-report.json and initial-evidence/). No fake model adapter or prescribed severity/result was used.
+
+A trusted Engine.run(resume=True) invocation automatically used that feedback to repair the function and add two regression tests. The controller then executed7 passing tests and fresh independent native AC/review; final findings are empty and gate APPROVED. progress.json records one authorized repair attempt and a completed cycle. The source fingerprint and check-run ID changed; raw/log receipt hashes and ordering were independently checked. The code was not manually repaired by the parent. Evidence: final-report.json, state task cycles archive and outputs/p2_cycle_live.py. The semantic verifier and reviewer actually reran the inspected preview suite read-only.
+
+## Mechanical regression and limits
+
+Tests cover P2 rejection despite green checks/AC, advisory P3, automatic two-cycle correction with new fingerprints and receipts, repeated-P2 exhaustion, malformed counter rejection, interrupted final-attempt verification, and archive retention. Deterministic model fixtures prove orchestration mechanics only; the native preview run separately proves the real model path. Full suite result and final feature-level native gate are recorded after actual execution in outputs/p2-cycle-report.json and outputs/p2-cycle-verification-manifest.json.
+
+Focused independent review found and resolved a P2 resume defect during implementation. A later native review found a mixed P2 plus unavailable-verifier case: the rejected verdict hid the blocked signal from retry decisions. Gate now exposes blocked_reasons separately; unresolved blockers stop mutation even when overall status is REJECTED. A plain run cannot bypass an existing blocker. Explicit resume may perform one fresh recovery check/verification without consuming implementation attempts; repairs continue only after fresh evidence removes all blockers. Pending blocked checks no longer launch unnecessary reviewers. Remote publication enforcement and hostile same-user isolation remain unavailable; native reviewer permissions remain read-only, implementation workspace-write, and no real remote was published.
+
+Executed complete regression:112 tests in184.192s, exit0, zero skips (outputs/p2-cycle-full-tests.log). Current runtime/tests/generator and log SHA256 binding: outputs/p2-cycle-full-binding.json. The final feature-level gate is evaluated after this source documentation is frozen.
+
+The earlier112-test/native-preview pass predates the infrastructure follow-up. Final current-source suite and native preview replay are recorded separately in the final report/manifest; source binding must match the final core/store revision.
+
+Final current-source regression:115 tests in181.428s, exit0, zero skips (outputs/p2-cycle-full-tests-final.log), including mixed-infrastructure recovery/direct-run guard and pending/attempt-zero cases. Native replay outputs/p2-cycle-live-final again produced real P2-only rejection with5 green tests/AC PASS, then controller repair and8 green tests/fresh AC/review/APPROVED in one repair attempt. The refreshed native receipt/archive bindings were independently validated. Earlier112/7-test evidence is retained as historical.

@@ -1,0 +1,30 @@
+{
+  "summary": "Replace with the expected result and material limits in roughly 5-8 user-facing lines.",
+  "business": "Replace with the recommended business approach and reason.",
+  "technical": "Replace with the technical means and already available reusable tools.",
+  "steps": [
+    "Inspect the named sources and relevant dependencies",
+    "Produce only the approved draft",
+    "Execute relevant checks and independent acceptance/review"
+  ],
+  "verification": "Replace with concrete profile evidence and the actual independent verification capability.",
+  "limitations": [
+    "Publication destination remains unresolved; draft is independently actionable.",
+    "An unavailable mandatory capability remains BLOCKED."
+  ],
+  "assumptions": [],
+  "non_goals": [
+    "Replace with what this change deliberately does not do."
+  ],
+  "unchanged_behavior": [
+    "Replace with existing behaviour and consumers that must stay the same."
+  ],
+  "alternatives": [
+    {"option": "Replace with a simpler or more local option", "why_not": "Why it does not meet the requirement", "cost": "Its cost or risk"}
+  ],
+  "rollback": "Replace with how to undo the change (revert commit, feature flag, migration down-step).",
+  "stage_ids": [
+    "draft",
+    "publish"
+  ]
+}
