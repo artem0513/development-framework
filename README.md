@@ -19,8 +19,8 @@
 Из папки, где лежит ваш `MyProject`, выполните:
 
 ```sh
-git clone https://github.com/artem0513/development-framework.git DevelopmentFramework
-python DevelopmentFramework/scripts/install.py --project ./MyProject --project-local --target codex --target claude --target copilot
+git clone --branch main --single-branch https://github.com/artem0513/development-framework.git
+python development-framework/scripts/install.py --project ./MyProject --project-local --target codex --target claude --target copilot
 ```
 
 Замените `./MyProject` своим путём и оставьте только нужные `--target`. Для просмотра изменений без записи добавьте `--preview`. Существующие инструкции сохраняются, изменяемые файлы фреймворка получают резервные копии.
@@ -67,6 +67,8 @@ CLI доступен и вручную из папки проекта. PowerShel
 Живые независимые сеансы проверены на Codex и Claude (Claude CLI: adequacy, AC и ревью на пакете 1,74 МБ через stdin). Для Copilot есть адаптер и автоматические проверки; живые сеансы Copilot пока не проверены. Облачному агенту нужен отдельно подготовленный runtime и доступ к данным: локальная память ПК туда автоматически не переносится.
 
 Локальный gate проверяет доказательства, но не защищает от другого процесса с теми же правами ОС. Для обязательного контроля публикации нужны доверенный CI и защита ветки. Публикация требует отдельной авторизации назначения.
+
+Файлы фреймворка содержат только вымышленные примеры. `python scripts/check_public_content.py` проверяет отслеживаемые файлы на пути к домашним папкам, адреса почты и файлы из `outputs/`, а также на шаблоны из личного списка вне репозитория (`ASE_PUBLIC_DENYLIST` или `~/.config/development-framework/public-denylist.txt`). `python scripts/install_hooks.py` ставит локальные хуки pre-commit и pre-push в `.git/hooks` этого клона (они не коммитятся): коммит или push останавливается при любом совпадении. Публичная копия выпускается только через `python scripts/publish_public.py`: он проверяет экспорт коммита, прогоняет тесты и отправляет в публичный репозиторий один коммит выпуска без истории частного репозитория.
 
 - [Установка, обновление и локальная память](docs/project-local.md)
 - [Рабочий процесс, вопросы и восстановление](docs/workflow.md)

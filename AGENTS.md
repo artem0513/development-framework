@@ -2,6 +2,8 @@ This repository implements Autonomous SE. Read docs/ADR-001.md for the trust bou
 
 Use Python 3.11+ standard library for the runtime. While iterating, run the affected suites: `python -B -m ase.modules --affected <changed files> --test`. Run the full `python -m unittest discover -s tests -v` (about 30-40 minutes; on Windows under `powershell -ExecutionPolicy Bypass`) before pushing substantive runtime changes, and not while files are still being edited. Keep independent AC and review sessions separate from implementation; a deterministic adapter is only a protocol test, never independent semantic validation.
 
+Framework content (skills, references, docs, tests, fixtures, eval cases, commit messages) uses only invented, generic examples. Never copy names of real projects, products, clients, companies or people, ticket keys, internal URLs, hostnames, account names, email addresses or absolute local paths (such as `C:\Users\<name>\...`) into tracked files; describe a real incident only in anonymized, generic form. Eval and run outputs and local evidence stay untracked: keep `outputs/` ignored and never commit run transcripts. `scripts/check_public_content.py` enforces this; publish only through `scripts/publish_public.py`.
+
 Treat this tool as a local reliability layer. Only a trusted CI runner plus server-side branch protection can enforce publishing against a hostile same-user agent. Reports must distinguish executed tests, independent judgments and unavailable enforcement.
 
 <!-- autonomous-se managed begin -->

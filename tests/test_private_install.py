@@ -306,7 +306,8 @@ class PrivateInstallTests(unittest.TestCase):
 
     def test_framework_remote_must_be_github_itself(self):
         from ase.project_local import FRAMEWORK_REMOTE
-        for url in ('https://github.com/artem0513/DevelopmentFramework.git', 'git@github.com:artem0513/DevelopmentFramework.git'):
+        for url in ('https://github.com/artem0513/DevelopmentFramework.git', 'git@github.com:artem0513/DevelopmentFramework.git',
+                    'https://github.com/artem0513/development-framework.git'):
             self.assertTrue(FRAMEWORK_REMOTE.search(url), url)
         self.assertFalse(FRAMEWORK_REMOTE.search('https://mirror.corp.example/github.com/artem0513/DevelopmentFramework.git'))
 

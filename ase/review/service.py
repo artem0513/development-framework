@@ -129,6 +129,28 @@ class VerificationService:
             'Judge the assigned criteria or code against actual test source and executed results. '
             'Report a concrete coverage gap when relevant to your judgment.'
         ) if adequacy else ''
+        from . import blind
+        blind_findings, blind_sha256 = [], None
+        if blind.enabled(task['contract']):
+            # The blind pass sees the change and its base, not the request, proposal or earlier verdicts. It runs
+            # first, so the scope review can show which of its blocking findings the requirement explicitly asks for.
+            backend = backend_for(task['contract'], 'review')
+            blind_planned = [(blind.LABEL, runners[backend], adapters[backend], context._request(task_id, 'review',
+                review_schema_for(task['contract'], self.review_schema),
+                {'instruction': blind.INSTRUCTION, 'stage_id': stage_id, 'purpose': blind.PURPOSE}))]
+            blind_results, blind_error = context._call(
+                task_id, lambda timeout: _run_sessions(context, task_id, blind_planned, timeout))
+            blind_receipt = (blind_results.get(blind.LABEL) or {}).get('receipt')
+            if blind_receipt and (blind_error is None or blind_receipt.get('status') == 'COMPLETE'):
+                context._save('verification_blind', blind.key(task_id, stage_id), blind_receipt)
+            if blind_error is not None:
+                raise blind_error
+            from ..runner import verify_receipt
+            try:
+                blind_findings = blind.blocking_findings(verify_receipt(blind_receipt)['result'].get('payload'))
+                blind_sha256 = hash_value(blind_receipt)
+            except (ValueError, OSError, KeyError, TypeError):
+                blind_findings = []  # The gate reports the unusable blind receipt.
         planned = []
         journal = Findings(context.store)
         journal_scopes = {}
@@ -180,6 +202,10 @@ class VerificationService:
             if label == 'review':
                 schema, history = _with_finding_history(journal, task, stage_id, None, schema, handoff)
                 journal_scopes[label] = (None, history)
+                if blind_findings:
+                    handoff.update(blind_findings=blind_findings, blind_receipt_sha256=blind_sha256)
+                    handoff['instruction'] += blind.CONFLICT_INSTRUCTION
+                    schema = blind.conflict_schema(schema, [row['finding_id'] for row in blind_findings])
             backend = backend_for(task['contract'], role)
             planned.append((label, runners[backend], adapters[backend], context._request(task_id, role, schema, handoff)))
         for part in review_parts(task['contract']):
@@ -199,13 +225,6 @@ class VerificationService:
             journal_scopes[label] = (part['id'], history)
             planned.append((label, runners[backend], adapters[backend],
                             context._request(task_id, 'review', schema, handoff)))
-        from . import blind
-        if blind.enabled(task['contract']):
-            # The blind pass sees the change and its base, not the request, proposal or earlier verdicts.
-            backend = backend_for(task['contract'], 'review')
-            planned.append((blind.LABEL, runners[backend], adapters[backend], context._request(task_id, 'review',
-                review_schema_for(task['contract'], self.review_schema),
-                {'instruction': blind.INSTRUCTION, 'stage_id': stage_id, 'purpose': blind.PURPOSE})))
         results, error = context._call(task_id, lambda timeout: _run_sessions(context, task_id, planned, timeout))
         # Completed sessions keep their receipts even when a sibling failed, so a retry is visible
         # and the gate judges each receipt on its own bindings.
@@ -215,8 +234,6 @@ class VerificationService:
                 receipt = results[label]['receipt']
                 if label.startswith('review_part:'):
                     kind, key = 'verification_part', part_key(task_id, stage_id, label.split(':', 1)[1])
-                elif label == blind.LABEL:
-                    kind, key = 'verification_blind', blind.key(task_id, stage_id)
                 else:
                     kind, key = 'verification', task_id + ':' + label + (':' + stage_id if label == 'adequacy' and stage_id else '')
                 if label not in journal_scopes:

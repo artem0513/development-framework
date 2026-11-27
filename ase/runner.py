@@ -23,7 +23,7 @@ from .protocol import canonical, decode_json, normalized, sha256, validate_packe
 
 
 def _long_path(path):
-    """Expand Windows 8.3 short components (C:\\Users\\ABCDEF~1) of an existing path; no link resolution."""
+    """Expand Windows 8.3 short components (C:\\PROGRA~1) of an existing path; no link resolution."""
     if os.name != "nt" or "~" not in str(path) or not path.exists():
         return path
     import ctypes

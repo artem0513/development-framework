@@ -101,6 +101,57 @@ class ProductionReasoningScenariosTests(unittest.TestCase):
                 request = reviewer_evaluation.prepare_candidate(self.root, number, case, variant)
                 self.assertNotIn('"expectation"', json.dumps(request, ensure_ascii=False))
 
+    def test_review_quality_scoring_counts_found_missed_and_false_positives(self):
+        score = reviewer_evaluation.score
+        cited = {'severity': 'P2', 'path': 'src/a.py', 'line': 1, 'message': 'Direct DB access',
+                 'evidence': '4 of 4 handlers use the repositories', 'consequence': 'x', 'fix': 'y'}
+        uncited = {**cited, 'evidence': 'Handlers should use repositories'}
+        elsewhere = {**cited, 'path': 'src/b.py'}
+        block = {'disposition': 'block', 'path': 'src/a.py', 'cite_precedent': True}
+        self.assertEqual(score([{'findings': [cited]}], block), {'found': True, 'false_positives': 0})
+        self.assertEqual(score([{'findings': [uncited, elsewhere]}], block), {'found': False, 'false_positives': 1})
+        note = {'disposition': 'note', 'path': 'src/a.py'}
+        self.assertTrue(score([{'findings': []}, {'findings': [{**uncited, 'severity': 'P3'}]}], note)['found'])
+        clean = {'disposition': 'pass'}
+        self.assertEqual(score([{'findings': [{**cited, 'severity': 'P3'}], 'unverified_material': ['scope']}], clean),
+                         {'found': None, 'false_positives': 1})
+        rows = [{'case': 'c', 'number': 1, 'verified': True, 'payloads': [{'findings': [cited]}]},
+                {'case': 'c', 'number': 2, 'verified': True, 'payloads': [{'findings': []}]},
+                {'case': 'c', 'number': 3, 'verified': False, 'payloads': []}]
+        summary = reviewer_evaluation.summarize(rows, {'1': block, '2': block, '3': block})
+        self.assertEqual(summary['c'], {'found': 1, 'missed': 1, 'false_positives': 0, 'runs': 3, 'unverified_runs': 1})
+
+    def test_review_quality_drops_only_blind_findings_reconciled_with_a_requirement_quote(self):
+        from ase.findings import finding_id
+        case = json.loads(reviewer_evaluation.CASES.read_text(encoding='utf-8'))['cases'][0]
+        wanted = {'severity': 'P2', 'path': 'src/mre.py', 'line': 1, 'message': 'Integer cents'}
+        other = {**wanted, 'message': 'Something else'}
+        scope = {'blind_requirement_conflicts': [
+            {'finding_id': finding_id(wanted), 'requirement_quote': 'Preserve the  shared billing contract.', 'reason': 'r'},
+            {'finding_id': finding_id(other), 'requirement_quote': 'Invent a new contract.', 'reason': 'r'}]}
+        kept, dropped = reviewer_evaluation.without_reconciled(case, {'findings': [wanted, other]}, scope)
+        self.assertEqual((kept['findings'], dropped), ([other], 1))
+
+    def test_project_cases_copy_the_project_without_its_history_or_private_state(self):
+        project = self.root / 'projects' / 'shop'
+        (project / '.git').mkdir(parents=True)
+        (project / '.devframework').mkdir()
+        (project / 'src').mkdir()
+        (project / '.devframework' / 'state.txt').write_text('private', encoding='utf-8')
+        (project / 'AGENTS.override.md').write_text('managed', encoding='utf-8')
+        (project / 'src' / 'shop.py').write_text('VALUE = 1\n', encoding='utf-8')
+        case = {'id': 'shop', 'project': 'shop', 'files': {'src/extra.py': 'VALUE = 2\n'}}
+        target = reviewer_evaluation.initialize_case(self.root / 'case', case, self.root / 'projects')
+        self.assertEqual((target / 'src' / 'shop.py').read_text(encoding='utf-8'), 'VALUE = 1\n')
+        self.assertEqual((target / 'src' / 'extra.py').read_text(encoding='utf-8'), 'VALUE = 2\n')
+        self.assertFalse((target / '.devframework').exists())
+        self.assertFalse((target / 'AGENTS.override.md').exists())
+        self.assertTrue((target / '.git').is_dir())  # Fresh disposable metadata, not the project's history.
+        self.assertFalse(list((target / '.git').glob('ORIG_HEAD')))
+        self.assertTrue((project / '.devframework' / 'state.txt').exists())
+        with self.assertRaisesRegex(ValueError, 'unknown project'):
+            reviewer_evaluation.initialize_case(self.root / 'other', {**case, 'project': '../shop'}, self.root / 'projects')
+
     def test_review_pair_refuses_a_candidate_with_only_skipped_checks(self):
         case = json.loads(reviewer_evaluation.CASES.read_text(encoding='utf-8'))['cases'][0]
         candidate = case['variants'][0]

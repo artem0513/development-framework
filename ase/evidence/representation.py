@@ -299,13 +299,15 @@ def known_sessions(store, task_id, stage_id, current, extra=()):
     return executions, sessions
 
 
-def review_session_verdict(store, contract, current, receipt, label, executions, sessions, extra_bindings):
+def review_session_verdict(store, contract, current, receipt, label, executions, sessions, extra_bindings, *,
+                           dismissed=frozenset()):
     """(blocked, rejected) for one additional independent review session bound to the current gate identities.
 
-    Adds the session to `executions`/`sessions`, so sibling sessions cannot share it.
+    Adds the session to `executions`/`sessions`, so sibling sessions cannot share it. A blocking finding whose
+    content ID is in `dismissed` was reconciled against the requirement by the caller and does not reject.
     """
     from pathlib import Path
-    from ..findings import substantive_review
+    from ..findings import finding_id, substantive_review
     from ..runner import verify_receipt
     blocked, rejected = [], []
     if not receipt:
@@ -350,7 +352,7 @@ def review_session_verdict(store, contract, current, receipt, label, executions,
     for finding in payload["findings"]:
         if not isinstance(finding, dict) or finding.get("severity") not in {"P0", "P1", "P2", "P3"}:
             blocked.append(label + ": malformed review finding")
-        elif finding["severity"] in {"P0", "P1", "P2"}:
+        elif finding["severity"] in {"P0", "P1", "P2"} and finding_id(finding) not in dismissed:
             rejected.append(label + ": " + finding["severity"] + ": "
                             + str(finding.get("message", "Blocking review finding"))[:MAX_QUOTED_CHARACTERS])
     return blocked, rejected

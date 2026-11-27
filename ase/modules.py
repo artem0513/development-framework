@@ -78,7 +78,7 @@ MODULES = (
     _module('access', 'Encrypted local credential profiles and approved authenticated access.',
         'access.py credentials.py _http_worker.py', 'access credentials credential_cli credential_integration', ('storage','tasks')),
     _module('delivery', 'Publication fence, observed Git state, transfer and project installation.',
-        'publishing.py transfer.py', 'publishing_v2 publishing_observed_inputs transfer portable_install project_install project_local_install private_install ci_inspector',
+        'publishing.py transfer.py', 'publishing_v2 publishing_observed_inputs transfer portable_install project_install project_local_install private_install ci_inspector public_content',
         ('storage','tasks','evidence'), ('project-bootstrap','gh-fix-ci')),
     _module('coordination', 'CLI and workflow manager joining modules in the approved stage order.',
         '__init__.py __main__.py workflow.py modules.py coordinator.py', 'cli_v2 workflow_v2 workflow_scenarios module_boundaries reasoning_rule_installation coordinator_events',

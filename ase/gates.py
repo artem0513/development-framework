@@ -579,8 +579,10 @@ class GateService:
                 extra.append("Source baseline was recorded for another repository/base: " + reason)
         part_blocked, part_rejected = part_gate(self.store, task["contract"], task_id, stage_id, current, changed_paths)
         from .review.blind import blind_gate
-        blind_blocked, blind_rejected = blind_gate(self.store, task["contract"], task_id, stage_id, current)
+        blind_blocked, blind_rejected, blind_dismissed = blind_gate(self.store, task["contract"], task_id, stage_id, current)
         part_blocked, part_rejected = part_blocked + blind_blocked, part_rejected + blind_rejected
+        if blind_dismissed:
+            result['blind_dismissed'] = blind_dismissed
         extra.extend(part_blocked)
         if part_rejected:
             result['rejected_reasons'] = list(dict.fromkeys(result['rejected_reasons'] + part_rejected))

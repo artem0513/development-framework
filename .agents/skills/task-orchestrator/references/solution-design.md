@@ -54,6 +54,23 @@ for its named ancestor stage and apply its relevant decisions within the child t
   branch; code whose only effect is in another, unmerged change does not belong here. Keep the base
   structure of a changed method: no pre-declared locals or re-indented unchanged code only to fit new
   control flow.
+- **Before and while coding.**
+  - *Remove and see.* For every new catch, guard, fallback, conversion or check, state what breaks on
+    the base branch if it is removed. If nothing breaks, do not add it.
+  - *Proportional diff.* Before coding, estimate the change size from the requirement. If the actual
+    diff grows clearly larger, stop and explain the difference in the plan instead of continuing.
+  - *Ask before working around.* If the simplest correct change touches code a rule or instruction
+    seems to protect, stop and ask the owner with both options; never build a parallel mechanism to
+    avoid the question.
+  - *Shared files in a task set.* When several branches or PRs of one task set change the same file,
+    detect it early (for example `git merge-tree` between the open branches), name one branch as the
+    owner of that file's change and ask the owner for the merge order before both are finished.
+  - *Readable classifications.* Write a classification as an explicit named set with one case per line;
+    never introduce a constant to bound an impossible value. Keep exception and model types plain
+    unless the project's own precedent puts logic there.
+  - *Existing tooling first.* When the project configures analyzers, linters or formatters, run them
+    on the changed files and declare that run as an evidence check so its output reaches the
+    reviewers. Never install or configure new tools.
 - **Precedent.** Follow the team's established way unless evidence shows it no longer fits. An
   explicit example-search opt-out skips deliberate example search while preserving inspection of
   actual callers and dependencies. On a

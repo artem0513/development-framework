@@ -23,7 +23,13 @@ PROVIDER = test_review_packet.PROVIDER.replace(
     " payload = {'findings':findings,",
     " if request['handoff'].get('purpose') == 'blind_review' and pathlib.Path('p2-blind').exists():\n"
     "  findings = [{'severity':'P2','path':'src/svc/alpha/m000.py','line':1,'message':'blind reader defect'}]\n"
-    " payload = {'findings':findings,")
+    " payload = {'findings':findings,").replace(
+    " payload = {'findings':findings,'summary':'Protocol-only boundary fixture for ' + part + ', not semantic review'}\n",
+    " payload = {'findings':findings,'summary':'Protocol-only boundary fixture for ' + part + ', not semantic review'}\n"
+    " quote = pathlib.Path('reconcile').read_text() if pathlib.Path('reconcile').exists() else None\n"
+    " if request['handoff'].get('blind_findings') and quote:\n"
+    "  payload['blind_requirement_conflicts'] = [{'finding_id': row['finding_id'], 'requirement_quote': quote,\n"
+    "   'reason': 'The request asks for exactly this.'} for row in request['handoff']['blind_findings']]\n")
 
 
 @unittest.skipUnless(shutil.which("git"), "git required")
@@ -94,6 +100,40 @@ class BlindReviewTests(PacketFixture):
         verdict = self.gate_at_protocol_boundary("blind")
         self.assertEqual(verdict["status"], "REJECTED")
         self.assertIn("Blind review: P2: blind reader defect", verdict["rejected_reasons"])
+
+    def test_scope_pass_reconciles_blind_findings_only_with_a_verbatim_requirement_quote(self):
+        self.approve_blind("blind")
+        provider = self.base / "provider"
+        provider.mkdir(exist_ok=True)
+        (provider / "p2-blind").write_text("", encoding="utf-8")
+        (provider / "reconcile").write_text("Never touch old_helper.", encoding="utf-8")
+        self.controller("blind").verify("blind")
+        review = read_record(self.store.db, "verification", "blind:review")["payload"]
+        request = json.loads(Path(review["artifacts"]["request"]["path"]).read_text(encoding="utf-8"))
+        blind_receipt = read_record(self.store.db, "verification_blind", blind.key("blind", None))["payload"]
+        from ase.state import hash_value
+        self.assertEqual(request["handoff"]["blind_receipt_sha256"], hash_value(blind_receipt))
+        self.assertEqual([row["message"] for row in request["handoff"]["blind_findings"]], ["blind reader defect"])
+        self.assertIn(blind.CONFLICT_FIELD, request["schema"]["required"])
+        # A quote the requirement does not contain changes nothing.
+        verdict = self.gate_at_protocol_boundary("blind")
+        self.assertIn("Blind review: P2: blind reader defect", verdict["rejected_reasons"])
+        self.assertNotIn("blind_dismissed", verdict)
+        # The exact request text reconciles the finding, and the gate says so.
+        (provider / "reconcile").write_text("rename  OLD_HELPER to new_helper", encoding="utf-8")
+        self.controller("blind").verify("blind")
+        verdict = self.gate_at_protocol_boundary("blind")
+        self.assertFalse([reason for reason in verdict["reasons"] if reason.startswith("Blind review")], verdict["reasons"])
+        self.assertEqual(len(verdict["blind_dismissed"]), 1)
+        self.assertIn("rename  OLD_HELPER to new_helper", verdict["blind_dismissed"][0])
+        # A newer blind pass is not covered by the older scope reconciliation.
+        with transaction(self.store.db) as db:
+            old = read_record(db, "verification_blind", blind.key("blind", None))
+            current = old["payload"]
+            write_record(db, "verification_blind", blind.key("blind", None), {**current, "ended_at_utc": "later"},
+                         expected_revision=old["revision"])
+        self.assertEqual(blind.dismissed(self.store, self.tasks.snapshot("blind")["contract"], "blind",
+                                         read_record(self.store.db, "verification_blind", blind.key("blind", None))["payload"]), {})
 
     def test_contract_field_is_validated_and_kept_across_revision(self):
         with self.assertRaisesRegex(ValueError, "blind_review"):

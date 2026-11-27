@@ -743,6 +743,810 @@
           }
         }
       ]
+    },
+    {
+      "id": "nested-notify-handling",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "When a project is archived, notify each of its members. Other notifications are unchanged.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "Archiving a project with two members enqueues one notify job per member.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/jobs.py": "class Queue:\n    def __init__(self):\n        self.jobs = []\n\n    def enqueue(self, kind, payload):\n        self.jobs.append((kind, payload))\n\n\nQUEUE = Queue()\n",
+        "src/flows/signup.py": "from src.jobs import QUEUE\n\n\ndef signup(user):\n    QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"], \"event\": \"signup\"})\n",
+        "src/flows/password_reset.py": "from src.jobs import QUEUE\n\n\ndef password_reset(user):\n    QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"], \"event\": \"password_reset\"})\n",
+        "src/flows/invoice_paid.py": "from src.jobs import QUEUE\n\n\ndef invoice_paid(user):\n    QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"], \"event\": \"invoice_paid\"})\n",
+        "src/flows/plan_changed.py": "from src.jobs import QUEUE\n\n\ndef plan_changed(user):\n    QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"], \"event\": \"plan_changed\"})\n",
+        "src/flows/trial_ending.py": "from src.jobs import QUEUE\n\n\ndef trial_ending(user):\n    QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"], \"event\": \"trial_ending\"})\n",
+        "src/projects.py": "def archive(project):\n    project[\"archived\"] = True\n",
+        "jobs.md": "QUEUE.enqueue only appends a job to the in-process queue; delivery and retries happen in the worker.\n",
+        "test_artifact.py": "import unittest\n\nfrom src.jobs import QUEUE\nfrom src.projects import archive\n\n\nclass ArchiveTests(unittest.TestCase):\n    def test_members_notified(self):\n        QUEUE.jobs.clear()\n        archive({\"id\": 1, \"members\": [{\"id\": 7}, {\"id\": 8}]})\n        self.assertEqual([job[1][\"user\"] for job in QUEUE.jobs], [7, 8])\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/projects.py": "import logging\n\nfrom src.jobs import QUEUE\n\nlog = logging.getLogger(__name__)\n\n\ndef _notify_members(project):\n    for member in project[\"members\"]:\n        try:\n            QUEUE.enqueue(\"notify\", {\"user\": member[\"id\"], \"event\": \"project_archived\"})\n        except Exception:\n            log.exception(\"notify failed for %s\", member[\"id\"])\n\n\ndef archive(project):\n    project[\"archived\"] = True\n    try:\n        _notify_members(project)\n    except Exception:\n        log.exception(\"archive notifications failed\")\n"
+          },
+          "expectation": {
+            "disposition": "note",
+            "reason": "Two nested try blocks around an enqueue that the five other callers never wrap.",
+            "path": "src/projects.py",
+            "cite_precedent": true
+          }
+        },
+        {
+          "changes": {
+            "src/projects.py": "from src.jobs import QUEUE\n\n\ndef archive(project):\n    project[\"archived\"] = True\n    for member in project[\"members\"]:\n        QUEUE.enqueue(\"notify\", {\"user\": member[\"id\"], \"event\": \"project_archived\"})\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Calls enqueue the way the other callers do."
+          }
+        }
+      ]
+    },
+    {
+      "id": "conversion-for-sibling-change",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "The token refresh must send the client ID with the refresh token. Nothing else changes.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "refresh posts refresh_token and client_id and still returns the access token.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/tokens.py": "import json\n\n\nclass TokenClient:\n    def __init__(self, http):\n        self.http = http\n\n    def refresh(self, refresh_token):\n        body = self.http.post(\"/token\", {\"refresh_token\": refresh_token})\n        return json.loads(body)[\"access_token\"]\n",
+        "src/refresh_job.py": "import logging\n\nlog = logging.getLogger(__name__)\n\n\ndef run(client, accounts):\n    for account in accounts:\n        try:\n            account[\"token\"] = client.refresh(account[\"refresh_token\"])\n        except Exception:\n            log.exception(\"refresh failed\")\n",
+        "test_artifact.py": "import json\nimport unittest\n\nfrom src.tokens import TokenClient\n\n\nclass Http:\n    def __init__(self):\n        self.sent = None\n\n    def post(self, path, form):\n        self.sent = form\n        return json.dumps({\"access_token\": \"a\"})\n\n\nclass RefreshTests(unittest.TestCase):\n    def test_client_id_sent(self):\n        http = Http()\n        self.assertEqual(TokenClient(http).refresh(\"r\"), \"a\")\n        self.assertEqual(http.sent, {\"refresh_token\": \"r\", \"client_id\": \"app\"})\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/tokens.py": "import json\n\nCLIENT_ID = \"app\"\n\n\nclass TokenClient:\n    def __init__(self, http):\n        self.http = http\n\n    def refresh(self, refresh_token):\n        body = self.http.post(\"/token\", {\"refresh_token\": refresh_token, \"client_id\": CLIENT_ID})\n        try:\n            token = json.loads(body).get(\"access_token\")\n        except ValueError as error:\n            raise ConnectionError(\"token endpoint unreachable\") from error\n        if not token:\n            raise ConnectionError(\"token endpoint unreachable\")\n        return token\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "Malformed JSON and empty tokens become ConnectionError, but nothing in this change distinguishes them (the only caller catches every exception); it only feeds a classifier from another change, and it names the wrong cause.",
+            "path": "src/tokens.py"
+          }
+        },
+        {
+          "changes": {
+            "src/tokens.py": "import json\n\nCLIENT_ID = \"app\"\n\n\nclass TokenClient:\n    def __init__(self, http):\n        self.http = http\n\n    def refresh(self, refresh_token):\n        body = self.http.post(\"/token\", {\"refresh_token\": refresh_token, \"client_id\": CLIENT_ID})\n        return json.loads(body)[\"access_token\"]\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Adds only the client ID."
+          }
+        }
+      ]
+    },
+    {
+      "id": "error-body-parsing",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "When the provider rejects a token, surface its error code so the user sees \"invalid_grant\" instead of a generic failure.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "A provider error body {\"error\": \"invalid_grant\", \"error_description\": \"...\"} yields \"invalid_grant\".",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/provider_models.py": "from dataclasses import dataclass\n\n\n@dataclass\nclass Account:\n    id: str\n    name: str\n\n    @classmethod\n    def parse(cls, data):\n        return cls(id=data[\"id\"], name=data[\"name\"])\n\n\n@dataclass\nclass Invoice:\n    id: str\n    total: int\n\n    @classmethod\n    def parse(cls, data):\n        return cls(id=data[\"id\"], total=data[\"total\"])\n",
+        "src/provider_errors.py": "def error_code(body):\n    return \"provider_error\"\n",
+        "test_artifact.py": "import unittest\n\nfrom src.provider_errors import error_code\n\n\nclass ErrorTests(unittest.TestCase):\n    def test_code(self):\n        self.assertEqual(error_code({\"error\": \"invalid_grant\", \"error_description\": \"x\"}), \"invalid_grant\")\n\n    def test_missing(self):\n        self.assertEqual(error_code({}), \"provider_error\")\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/provider_errors.py": "def error_code(body):\n    if isinstance(body, dict) and \"error\" in body and isinstance(body.get(\"error\"), str) \\\n            and body.get(\"error\").strip():\n        return body[\"error\"]\n    return \"provider_error\"\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "Hand-navigates the error body while provider_models.py parses this API through small typed models (2 of 2); a two-field model makes the condition one line.",
+            "path": "src/provider_errors.py",
+            "cite_precedent": true
+          }
+        },
+        {
+          "changes": {
+            "src/provider_models.py": "from dataclasses import dataclass\n\n\n@dataclass\nclass Account:\n    id: str\n    name: str\n\n    @classmethod\n    def parse(cls, data):\n        return cls(id=data[\"id\"], name=data[\"name\"])\n\n\n@dataclass\nclass Invoice:\n    id: str\n    total: int\n\n    @classmethod\n    def parse(cls, data):\n        return cls(id=data[\"id\"], total=data[\"total\"])\n\n\n@dataclass\nclass ProviderError:\n    error: str = \"provider_error\"\n\n    @classmethod\n    def parse(cls, data):\n        return cls(error=data.get(\"error\") or \"provider_error\")\n",
+            "src/provider_errors.py": "from src.provider_models import ProviderError\n\n\ndef error_code(body):\n    return ProviderError.parse(body).error\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Parses the error body like the API's other models."
+          }
+        }
+      ]
+    },
+    {
+      "id": "try-around-middle",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "When the document provider fails during publish, return {\"status\": \"provider_failed\"} instead of raising. Successful publishing is unchanged.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "A ProviderError from upload yields provider_failed; a successful upload still publishes.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/workspaces.py": "def load_workspaces(user):\n    return user[\"workspaces\"]\n",
+        "src/documents.py": "class ProviderError(Exception):\n    pass\n\n\ndef upload(folder, document):\n    return folder[\"upload\"](document)\n",
+        "src/publish.py": "from src.workspaces import load_workspaces\nfrom src.documents import upload\n\n\ndef publish(user, document):\n    workspaces = load_workspaces(user)\n    workspace = workspaces[0]\n    folder = workspace[\"folders\"][document[\"kind\"]]\n    receipt = upload(folder, document)\n    return {\"status\": \"published\", \"receipt\": receipt}\n",
+        "test_artifact.py": "import unittest\n\nfrom src.documents import ProviderError\nfrom src.publish import publish\n\n\ndef fail(document):\n    raise ProviderError()\n\n\ndef user(upload):\n    return {\"workspaces\": [{\"folders\": {\"memo\": {\"upload\": upload}}}]}\n\n\nclass PublishTests(unittest.TestCase):\n    def test_failure(self):\n        self.assertEqual(publish(user(fail), {\"kind\": \"memo\"}), {\"status\": \"provider_failed\"})\n\n    def test_success(self):\n        self.assertEqual(publish(user(lambda d: \"r1\"), {\"kind\": \"memo\"})[\"receipt\"], \"r1\")\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/publish.py": "from src.workspaces import load_workspaces\nfrom src.documents import ProviderError, upload\n\n\ndef publish(user, document):\n    workspaces = None\n    workspace = None\n    folder = None\n    receipt = None\n    try:\n        workspaces = load_workspaces(user)\n        workspace = workspaces[0]\n        folder = workspace[\"folders\"][document[\"kind\"]]\n        receipt = upload(folder, document)\n    except ProviderError:\n        return {\"status\": \"provider_failed\"}\n    return {\"status\": \"published\", \"receipt\": receipt}\n"
+          },
+          "expectation": {
+            "disposition": "note",
+            "reason": "A try around the middle forces four pre-declared locals and re-indents unchanged lines; a narrow try around upload keeps the base shape.",
+            "path": "src/publish.py"
+          }
+        },
+        {
+          "changes": {
+            "src/publish.py": "from src.workspaces import load_workspaces\nfrom src.documents import ProviderError, upload\n\n\ndef publish(user, document):\n    workspaces = load_workspaces(user)\n    workspace = workspaces[0]\n    folder = workspace[\"folders\"][document[\"kind\"]]\n    try:\n        receipt = upload(folder, document)\n    except ProviderError:\n        return {\"status\": \"provider_failed\"}\n    return {\"status\": \"published\", \"receipt\": receipt}\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "A narrow try around the one call keeps the base structure."
+          }
+        }
+      ]
+    },
+    {
+      "id": "reader-pass-status",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Show \"delayed\" for tracked, undelivered parcels after their promised time. Preserve the order of the other statuses.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "After the promised time a tracked parcel is delayed; delivered and pending keep priority.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/eta.py": "def label(delivered, tracked, promised_at, now):\n    if delivered:\n        return \"delivered\"\n    if not tracked:\n        return \"pending\"\n    return \"in_transit\"\n",
+        "src/returns.py": "def label(received, tracked, requested_at, now):\n    if received:\n        return \"received\"\n    if not tracked:\n        return \"pending\"\n    if requested_at is not None and now > requested_at:\n        return \"overdue\"\n    return \"in_transit\"\n",
+        "test_artifact.py": "from itertools import product\nimport unittest\n\nfrom src.eta import label\n\n\nclass StatusTests(unittest.TestCase):\n    def test_all(self):\n        for d, t, p in product((False, True), (False, True), (None, 9, 10, 11)):\n            expected = \"delivered\" if d else \"pending\" if not t else \"delayed\" if p == 9 else \"in_transit\"\n            self.assertEqual(label(d, t, p, 10), expected)\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/eta.py": "def label(delivered, tracked, promised_at, now):\n    labels = {0: \"in_transit\", 1: \"pending\", 2: \"delayed\", 4: \"delivered\"}\n    code = 4 if delivered else 1 if not tracked else 2 if (promised_at is not None and now > promised_at) else 0\n    return labels[code]\n"
+          },
+          "expectation": {
+            "disposition": "note",
+            "reason": "Numeric codes and a nested conditional expression replace the early-guard order that returns.py and the base version use; a reader must decode the codes.",
+            "path": "src/eta.py",
+            "cite_precedent": true
+          }
+        },
+        {
+          "changes": {
+            "src/eta.py": "def label(delivered, tracked, promised_at, now):\n    if delivered:\n        return \"delivered\"\n    if not tracked:\n        return \"pending\"\n    if promised_at is not None and now > promised_at:\n        return \"delayed\"\n    return \"in_transit\"\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Adds one early guard like returns.py."
+          }
+        }
+      ]
+    },
+    {
+      "id": "pair-data-access-layered",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Add an archived-orders handler that returns a customer's archived orders.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "archived_orders(5) returns only customer 5's archived orders.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/db.py": "DB = {\"orders\": [], \"customers\": []}\n",
+        "src/repositories.py": "from src.db import DB\n\n\nclass Orders:\n    def by_customer(self, customer_id):\n        return [o for o in DB[\"orders\"] if o[\"customer\"] == customer_id]\n\n\nclass Customers:\n    def get(self, customer_id):\n        return next(c for c in DB[\"customers\"] if c[\"id\"] == customer_id)\n",
+        "test_artifact.py": "import unittest\n\nfrom src.db import DB\nfrom src.handlers.archived import archived_orders\n\n\nclass ArchivedTests(unittest.TestCase):\n    def test_archived(self):\n        DB[\"orders\"][:] = [{\"id\": 1, \"customer\": 5, \"archived\": True}, {\"id\": 2, \"customer\": 5, \"archived\": False}]\n        self.assertEqual([o[\"id\"] for o in archived_orders(5)], [1])\n",
+        "src/handlers/open_orders.py": "from src.repositories import Customers, Orders\n\n\ndef open_orders(customer_id):\n    orders = Orders().by_customer(customer_id)\n    return {\"customer\": Customers().get(customer_id), \"count\": len(orders)}\n",
+        "src/handlers/order_total.py": "from src.repositories import Customers, Orders\n\n\ndef order_total(customer_id):\n    orders = Orders().by_customer(customer_id)\n    return {\"customer\": Customers().get(customer_id), \"count\": len(orders)}\n",
+        "src/handlers/customer_card.py": "from src.repositories import Customers, Orders\n\n\ndef customer_card(customer_id):\n    orders = Orders().by_customer(customer_id)\n    return {\"customer\": Customers().get(customer_id), \"count\": len(orders)}\n",
+        "src/handlers/recent_orders.py": "from src.repositories import Customers, Orders\n\n\ndef recent_orders(customer_id):\n    orders = Orders().by_customer(customer_id)\n    return {\"customer\": Customers().get(customer_id), \"count\": len(orders)}\n",
+        "src/handlers/__init__.py": "",
+        "src/handlers/archived.py": "def archived_orders(customer_id):\n    return []\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/handlers/archived.py": "from src.db import DB\n\n\ndef archived_orders(customer_id):\n    return [o for o in DB[\"orders\"] if o[\"customer\"] == customer_id and o[\"archived\"]]\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "reason": "Queries DB directly while 4 of 4 handlers go through the repositories.",
+            "path": "src/handlers/archived.py",
+            "cite_precedent": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "pair-data-access-flat",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Add an archived-orders handler that returns a customer's archived orders.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "archived_orders(5) returns only customer 5's archived orders.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/db.py": "DB = {\"orders\": [], \"customers\": []}\n",
+        "test_artifact.py": "import unittest\n\nfrom src.db import DB\nfrom src.handlers.archived import archived_orders\n\n\nclass ArchivedTests(unittest.TestCase):\n    def test_archived(self):\n        DB[\"orders\"][:] = [{\"id\": 1, \"customer\": 5, \"archived\": True}, {\"id\": 2, \"customer\": 5, \"archived\": False}]\n        self.assertEqual([o[\"id\"] for o in archived_orders(5)], [1])\n",
+        "src/handlers/open_orders.py": "from src.db import DB\n\n\ndef open_orders(customer_id):\n    orders = [o for o in DB[\"orders\"] if o[\"customer\"] == customer_id]\n    return {\"count\": len(orders)}\n",
+        "src/handlers/order_total.py": "from src.db import DB\n\n\ndef order_total(customer_id):\n    orders = [o for o in DB[\"orders\"] if o[\"customer\"] == customer_id]\n    return {\"count\": len(orders)}\n",
+        "src/handlers/customer_card.py": "from src.db import DB\n\n\ndef customer_card(customer_id):\n    orders = [o for o in DB[\"orders\"] if o[\"customer\"] == customer_id]\n    return {\"count\": len(orders)}\n",
+        "src/handlers/recent_orders.py": "from src.db import DB\n\n\ndef recent_orders(customer_id):\n    orders = [o for o in DB[\"orders\"] if o[\"customer\"] == customer_id]\n    return {\"count\": len(orders)}\n",
+        "src/handlers/__init__.py": "",
+        "src/handlers/archived.py": "def archived_orders(customer_id):\n    return []\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/handlers/archived.py": "from src.db import DB\n\n\ndef archived_orders(customer_id):\n    return [o for o in DB[\"orders\"] if o[\"customer\"] == customer_id and o[\"archived\"]]\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Queries DB directly like 4 of 4 handlers; there is no repository layer."
+          }
+        }
+      ]
+    },
+    {
+      "id": "pair-enqueue-wrapped",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Notify the user when their export is ready.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "export_ready enqueues one notify job for the user.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/jobs.py": "class QueueFull(Exception):\n    pass\n\n\nclass Queue:\n    LIMIT = 1000\n\n    def __init__(self):\n        self.jobs = []\n\n    def enqueue(self, kind, payload):\n        if len(self.jobs) >= self.LIMIT:\n            raise QueueFull()\n        self.jobs.append((kind, payload))\n\n\nQUEUE = Queue()\n",
+        "src/flows/__init__.py": "",
+        "test_artifact.py": "import unittest\n\nfrom src.jobs import QUEUE\nfrom src.flows.export_ready import export_ready\n\n\nclass NotifyTests(unittest.TestCase):\n    def test_notify(self):\n        QUEUE.jobs.clear()\n        export_ready({\"id\": 3})\n        self.assertEqual(QUEUE.jobs, [(\"notify\", {\"user\": 3})])\n",
+        "src/flows/export_ready.py": "def export_ready(user):\n    pass\n",
+        "src/flows/signup.py": "import logging\n\nfrom src.jobs import QUEUE, QueueFull\n\nlog = logging.getLogger(__name__)\n\n\ndef signup(user):\n    try:\n        QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"]})\n    except QueueFull:\n        log.warning(\"queue full, notification dropped\")\n",
+        "src/flows/invoice_paid.py": "import logging\n\nfrom src.jobs import QUEUE, QueueFull\n\nlog = logging.getLogger(__name__)\n\n\ndef invoice_paid(user):\n    try:\n        QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"]})\n    except QueueFull:\n        log.warning(\"queue full, notification dropped\")\n",
+        "src/flows/trial_ending.py": "import logging\n\nfrom src.jobs import QUEUE, QueueFull\n\nlog = logging.getLogger(__name__)\n\n\ndef trial_ending(user):\n    try:\n        QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"]})\n    except QueueFull:\n        log.warning(\"queue full, notification dropped\")\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/flows/export_ready.py": "import logging\n\nfrom src.jobs import QUEUE, QueueFull\n\nlog = logging.getLogger(__name__)\n\n\ndef export_ready(user):\n    try:\n        QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"]})\n    except QueueFull:\n        log.warning(\"queue full, notification dropped\")\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "Wraps enqueue like 3 of 3 other callers."
+          }
+        }
+      ]
+    },
+    {
+      "id": "pair-enqueue-plain",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Notify the user when their export is ready.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "export_ready enqueues one notify job for the user.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/jobs.py": "class QueueFull(Exception):\n    pass\n\n\nclass Queue:\n    LIMIT = 1000\n\n    def __init__(self):\n        self.jobs = []\n\n    def enqueue(self, kind, payload):\n        if len(self.jobs) >= self.LIMIT:\n            raise QueueFull()\n        self.jobs.append((kind, payload))\n\n\nQUEUE = Queue()\n",
+        "src/flows/__init__.py": "",
+        "test_artifact.py": "import unittest\n\nfrom src.jobs import QUEUE\nfrom src.flows.export_ready import export_ready\n\n\nclass NotifyTests(unittest.TestCase):\n    def test_notify(self):\n        QUEUE.jobs.clear()\n        export_ready({\"id\": 3})\n        self.assertEqual(QUEUE.jobs, [(\"notify\", {\"user\": 3})])\n",
+        "src/flows/export_ready.py": "def export_ready(user):\n    pass\n",
+        "src/flows/signup.py": "from src.jobs import QUEUE\n\n\ndef signup(user):\n    QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"]})\n",
+        "src/flows/invoice_paid.py": "from src.jobs import QUEUE\n\n\ndef invoice_paid(user):\n    QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"]})\n",
+        "src/flows/trial_ending.py": "from src.jobs import QUEUE\n\n\ndef trial_ending(user):\n    QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"]})\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/flows/export_ready.py": "import logging\n\nfrom src.jobs import QUEUE, QueueFull\n\nlog = logging.getLogger(__name__)\n\n\ndef export_ready(user):\n    try:\n        QUEUE.enqueue(\"notify\", {\"user\": user[\"id\"]})\n    except QueueFull:\n        log.warning(\"queue full, notification dropped\")\n"
+          },
+          "expectation": {
+            "disposition": "note",
+            "reason": "Wraps enqueue although 3 of 3 other callers call it plainly.",
+            "path": "src/flows/export_ready.py",
+            "cite_precedent": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "classification-in-exception",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Sync must report \"provider unavailable\" (throw ProviderUnavailableException) when the provider call fails with no HTTP status, 401, 408, a server outage status or a timeout. Other failures keep their current handling.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "Those failures become ProviderUnavailableException in both jobs; other failures are unchanged.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/Providers/ProviderAuthException.cs": "namespace Sync.Providers;\n\npublic sealed class ProviderAuthException(string message) : Exception(message);\n",
+        "src/Providers/RateLimitedException.cs": "namespace Sync.Providers;\n\npublic sealed class RateLimitedException(string message) : Exception(message);\n",
+        "src/Providers/ProviderClient.cs": "namespace Sync.Providers;\n\nusing System.Net;\n\npublic sealed class ProviderClient(HttpClient http)\n{\n    private static readonly IReadOnlySet<HttpStatusCode> RetryStatusCodes =\n        new HashSet<HttpStatusCode> { HttpStatusCode.TooManyRequests, HttpStatusCode.ServiceUnavailable };\n\n    public async Task SyncAsync(CancellationToken ct) => Check(await http.PostAsync(\"/sync\", null, ct));\n\n    public async Task ImportAsync(CancellationToken ct) => Check(await http.PostAsync(\"/import\", null, ct));\n\n    public static bool ShouldRetry(HttpResponseMessage resp) => RetryStatusCodes.Contains(resp.StatusCode);\n\n    private static void Check(HttpResponseMessage resp)\n    {\n        if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)\n            throw new InvalidOperationException(\"Provider record missing\");\n        if (resp.StatusCode is HttpStatusCode.Forbidden)\n            throw new ProviderAuthException(\"Provider access denied\");\n        resp.EnsureSuccessStatusCode();\n    }\n}\n",
+        "src/Providers/ProviderFailures.cs": "namespace Sync.Providers;\n\nusing System.Net;\n\npublic static class ProviderFailures\n{\n    public static bool IsTransient(Exception error, CancellationToken ct) => error switch\n    {\n        _ when ct.IsCancellationRequested => false,\n        RateLimitedException => true,\n        _ => false\n    };\n}\n",
+        "src/Jobs/SyncJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class SyncJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.SyncAsync(ct);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n",
+        "src/Jobs/ImportJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class ImportJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.ImportAsync(ct);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n",
+        "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"*.cs\"))\n        for needle in (\"ProviderUnavailableException\", \"Unauthorized\", \"RequestTimeout\", \"TimeoutException\"):\n            self.assertIn(needle, text)\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/Providers/ProviderUnavailableException.cs": "namespace Sync.Providers;\n\nusing System.Net;\n\npublic sealed class ProviderUnavailableException(string message, Exception inner) : Exception(message, inner)\n{\n    public static bool IsProviderFailure(Exception error, CancellationToken ct)\n    {\n        const int ServerErrorStatusEndExclusive = 600;\n        if (ct.IsCancellationRequested) return false;\n        return error switch\n        {\n            HttpRequestException http => http.StatusCode is null or HttpStatusCode.Unauthorized or HttpStatusCode.RequestTimeout\n                || (int)http.StatusCode.Value is >= (int)HttpStatusCode.InternalServerError and < ServerErrorStatusEndExclusive,\n            OperationCanceledException { InnerException: TimeoutException } => true,\n            _ => false\n        };\n    }\n}\n",
+            "src/Jobs/SyncJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class SyncJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.SyncAsync(ct);\n        }\n        catch (Exception error) when (ProviderUnavailableException.IsProviderFailure(error, ct))\n        {\n            throw new ProviderUnavailableException(\"Provider unavailable\", error);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n",
+            "src/Jobs/ImportJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class ImportJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.ImportAsync(ct);\n        }\n        catch (Exception error) when (ProviderUnavailableException.IsProviderFailure(error, ct))\n        {\n            throw new ProviderUnavailableException(\"Provider unavailable\", error);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "path": "src/Providers/ProviderUnavailableException.cs",
+            "reason": "One expression mixes is/or, || and a relational pattern with casts; a constant bounds impossible statuses; an open 5xx range also takes 501; and the logic sits in an exception type although the other exceptions are plain and ProviderFailures serves both callers. The project writes status decisions as explicit lists and named sets."
+          }
+        },
+        {
+          "changes": {
+            "src/Providers/ProviderUnavailableException.cs": "namespace Sync.Providers;\n\npublic sealed class ProviderUnavailableException(string message, Exception inner) : Exception(message, inner);\n",
+            "src/Providers/ProviderFailures.cs": "namespace Sync.Providers;\n\nusing System.Net;\n\npublic static class ProviderFailures\n{\n    private static readonly IReadOnlySet<HttpStatusCode> UnavailableStatusCodes = new HashSet<HttpStatusCode>\n    {\n        HttpStatusCode.Unauthorized,\n        HttpStatusCode.RequestTimeout,\n        HttpStatusCode.InternalServerError,\n        HttpStatusCode.BadGateway,\n        HttpStatusCode.ServiceUnavailable,\n        HttpStatusCode.GatewayTimeout,\n    };\n\n    public static bool IsTransient(Exception error, CancellationToken ct) => error switch\n    {\n        _ when ct.IsCancellationRequested => false,\n        RateLimitedException => true,\n        _ => false\n    };\n\n    public static bool IsUnavailable(Exception error, CancellationToken ct) => error switch\n    {\n        _ when ct.IsCancellationRequested => false,\n        HttpRequestException { StatusCode: null } => true,\n        HttpRequestException { StatusCode: { } status } => UnavailableStatusCodes.Contains(status),\n        OperationCanceledException { InnerException: TimeoutException } => true,\n        _ => false\n    };\n}\n",
+            "src/Jobs/SyncJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class SyncJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.SyncAsync(ct);\n        }\n        catch (Exception error) when (ProviderFailures.IsUnavailable(error, ct))\n        {\n            throw new ProviderUnavailableException(\"Provider unavailable\", error);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n",
+            "src/Jobs/ImportJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class ImportJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.ImportAsync(ct);\n        }\n        catch (Exception error) when (ProviderFailures.IsUnavailable(error, ct))\n        {\n            throw new ProviderUnavailableException(\"Provider unavailable\", error);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "A plain exception and a named status set in the existing helper, one case per line."
+          }
+        }
+      ]
+    },
+    {
+      "id": "classification-range-precedent",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "Sync must report \"provider unavailable\" (throw ProviderUnavailableException) when the provider call fails with no HTTP status, 401, 408, any server-side (5xx) status or a timeout. Other failures keep their current handling.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "expected": "Those failures become ProviderUnavailableException in both jobs; other failures are unchanged.",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/Providers/ProviderAuthException.cs": "namespace Sync.Providers;\n\npublic sealed class ProviderAuthException(string message) : Exception(message);\n",
+        "src/Providers/RateLimitedException.cs": "namespace Sync.Providers;\n\npublic sealed class RateLimitedException(string message) : Exception(message);\n",
+        "src/Providers/ProviderClient.cs": "namespace Sync.Providers;\n\nusing System.Net;\n\npublic sealed class ProviderClient(HttpClient http)\n{\n    public async Task SyncAsync(CancellationToken ct) => Check(await http.PostAsync(\"/sync\", null, ct));\n\n    public async Task ImportAsync(CancellationToken ct) => Check(await http.PostAsync(\"/import\", null, ct));\n\n    // Every server-side status means the provider is degraded; the provider documents no 5xx it uses for client errors.\n    public static bool ShouldRetry(HttpResponseMessage resp) => (int)resp.StatusCode >= 500;\n\n    private static void Check(HttpResponseMessage resp)\n    {\n        if ((int)resp.StatusCode >= 500)\n            throw new HttpRequestException(\"Provider degraded\", null, resp.StatusCode);\n        if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)\n            throw new InvalidOperationException(\"Provider record missing\");\n        if (resp.StatusCode is HttpStatusCode.Forbidden)\n            throw new ProviderAuthException(\"Provider access denied\");\n        resp.EnsureSuccessStatusCode();\n    }\n}\n",
+        "src/Providers/ProviderFailures.cs": "namespace Sync.Providers;\n\nusing System.Net;\n\npublic static class ProviderFailures\n{\n    public static bool IsTransient(Exception error, CancellationToken ct) => error switch\n    {\n        _ when ct.IsCancellationRequested => false,\n        RateLimitedException => true,\n        HttpRequestException { StatusCode: { } status } when (int)status >= 500 => true,\n        _ => false\n    };\n}\n",
+        "src/Jobs/SyncJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class SyncJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.SyncAsync(ct);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n",
+        "src/Jobs/ImportJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class ImportJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.ImportAsync(ct);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n",
+        "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"*.cs\"))\n        for needle in (\"ProviderUnavailableException\", \"Unauthorized\", \"RequestTimeout\", \"TimeoutException\"):\n            self.assertIn(needle, text)\n",
+        "docs/provider.md": "The provider uses 5xx only for its own degradation; every 5xx means unavailable.\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/Providers/ProviderUnavailableException.cs": "namespace Sync.Providers;\n\npublic sealed class ProviderUnavailableException(string message, Exception inner) : Exception(message, inner);\n",
+            "src/Providers/ProviderFailures.cs": "namespace Sync.Providers;\n\nusing System.Net;\n\npublic static class ProviderFailures\n{\n    public static bool IsTransient(Exception error, CancellationToken ct) => error switch\n    {\n        _ when ct.IsCancellationRequested => false,\n        RateLimitedException => true,\n        HttpRequestException { StatusCode: { } status } when (int)status >= 500 => true,\n        _ => false\n    };\n\n    public static bool IsUnavailable(Exception error, CancellationToken ct) => error switch\n    {\n        _ when ct.IsCancellationRequested => false,\n        HttpRequestException { StatusCode: null } => true,\n        HttpRequestException { StatusCode: HttpStatusCode.Unauthorized } => true,\n        HttpRequestException { StatusCode: HttpStatusCode.RequestTimeout } => true,\n        HttpRequestException { StatusCode: { } status } when (int)status >= 500 => true,\n        OperationCanceledException { InnerException: TimeoutException } => true,\n        _ => false\n    };\n}\n",
+            "src/Jobs/SyncJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class SyncJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.SyncAsync(ct);\n        }\n        catch (Exception error) when (ProviderFailures.IsUnavailable(error, ct))\n        {\n            throw new ProviderUnavailableException(\"Provider unavailable\", error);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n",
+            "src/Jobs/ImportJob.cs": "namespace Sync.Jobs;\n\nusing Sync.Providers;\n\npublic sealed class ImportJob(ProviderClient client)\n{\n    public async Task RunAsync(CancellationToken ct)\n    {\n        try\n        {\n            await client.ImportAsync(ct);\n        }\n        catch (Exception error) when (ProviderFailures.IsUnavailable(error, ct))\n        {\n            throw new ProviderUnavailableException(\"Provider unavailable\", error);\n        }\n        catch (Exception error) when (ProviderFailures.IsTransient(error, ct))\n        {\n            throw;\n        }\n    }\n}\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "The 5xx range is the requirement and the project's own precedent (3 of 3 status decisions use >= 500); one case per line."
+          }
+        }
+      ]
     }
   ]
 }
