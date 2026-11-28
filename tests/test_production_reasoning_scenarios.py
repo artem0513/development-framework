@@ -101,6 +101,61 @@ class ProductionReasoningScenariosTests(unittest.TestCase):
                 request = reviewer_evaluation.prepare_candidate(self.root, number, case, variant)
                 self.assertNotIn('"expectation"', json.dumps(request, ensure_ascii=False))
 
+    def test_every_evaluation_set_variant_has_a_failing_baseline_green_candidate_and_hidden_key(self):
+        cases = json.loads(reviewer_evaluation.EVAL_SET.read_text(encoding='utf-8'))['cases']
+        self.assertGreaterEqual(len({case['stack'] for case in cases}), 3)
+        self.assertTrue(any(not variant['answer_key']['expected'] for case in cases for variant in case['variants']))
+        jobs = [(case, variant) for case in cases for variant in case['variants']]
+        for number, (case, variant) in enumerate(jobs, 1):
+            with self.subTest(case=case['id']):
+                key = variant['answer_key']
+                self.assertTrue(key['must_not_flag'], 'every case carries a must-not-flag trap')
+                for row in key['expected']:
+                    self.assertIn(row['severity'], {'P0', 'P1', 'P2', 'P3'})
+                request = reviewer_evaluation.prepare_candidate(self.root, number, case, variant)
+                packet = json.dumps(request, ensure_ascii=False)
+                for hidden in ('"answer_key"', '"must_not_flag"', variant['expectation']['reason'],
+                               *(row['reason'] for row in key['must_not_flag'])):
+                    self.assertNotIn(hidden, packet)
+
+    def test_answer_key_scoring_separates_matches_traps_and_false_positives(self):
+        key = {'expected': [{'id': 'limit', 'path': 'src/a.cs', 'severity': 'P1', 'pattern': '(?i)refund'}],
+               'must_not_flag': [{'id': 'layer', 'path': 'src/a.cs', 'pattern': '(?i)repositor'}],
+               'also_valid': [{'id': 'parse', 'path': 'src/a.cs', 'pattern': '(?i)malformed'}]}
+        defect = {'severity': 'P2', 'path': 'src/a.cs', 'line': 9, 'message': 'Refund limit ignores earlier refunds'}
+        trap = {'severity': 'P2', 'path': 'src/a.cs', 'line': 3, 'message': 'Use a repository instead of the context'}
+        stray = {'severity': 'P1', 'path': 'src/b.cs', 'line': 1, 'message': 'Unrelated'}
+        harness = {'severity': 'P2', 'path': 'test_artifact.py', 'line': 1, 'message': 'The check only greps source'}
+        result = reviewer_evaluation.score_answer_key([{'findings': [defect, trap, harness]}, {'findings': [stray]}], key)
+        self.assertEqual(result, {'found': ['limit'], 'missed': [], 'severity_matches': 0, 'false_positives': 2,
+                                  'trap_hits': ['layer'], 'unverified': 0, 'harness_check_findings': 1})
+        missed = reviewer_evaluation.score_answer_key([{'findings': [{**defect, 'severity': 'P3'}]}], key)
+        self.assertEqual((missed['found'], missed['missed'], missed['false_positives']), ([], ['limit'], 0))
+        # Each expected defect counts once by what it says; another blocking claim in that file is false
+        # unless the key lists it as also valid.
+        restated = {**defect, 'line': 10, 'message': 'Earlier refunds are not subtracted'}
+        unrelated = {**defect, 'line': 11, 'message': 'Rename the variable'}
+        valid = {**defect, 'line': 12, 'message': 'A malformed amount throws'}
+        result = reviewer_evaluation.score_answer_key([{'findings': [defect, restated, unrelated, valid]}], key)
+        self.assertEqual((result['found'], result['false_positives']), (['limit'], 1))
+        wrong = reviewer_evaluation.score_answer_key([{'findings': [unrelated]}], key)
+        self.assertEqual((wrong['missed'], wrong['false_positives']), (['limit'], 1))
+        rows = [{'case': 'c', 'number': 1, 'verified': True, 'payloads': [{'findings': [{**defect, 'severity': 'P1'}]}]}]
+        summary = reviewer_evaluation.summarize(rows, {'1': {'disposition': 'block', 'answer_key': key}})
+        self.assertEqual(summary['c'], {'found': 1, 'missed': 0, 'false_positives': 0, 'runs': 1, 'unverified_runs': 0,
+                                        'trap_hits': 0, 'severity_matches': 1, 'unverified_material': 0,
+                                        'harness_check_findings': 0})
+        # The acceptance rule: neither misses nor false positives may increase on the same cases.
+        worse = {'c': {**summary['c'], 'false_positives': 1}}
+        self.assertTrue(reviewer_evaluation.compare(summary, worse)['accepted'])
+        self.assertFalse(reviewer_evaluation.compare(worse, summary)['accepted'])
+        self.assertFalse(reviewer_evaluation.compare({'c': {**summary['c'], 'missed': 1}}, summary)['accepted'])
+        self.assertFalse(reviewer_evaluation.compare(summary, {'d': summary['c']})['accepted'])
+        # Fewer repeats cannot look better, and unverified items may not grow instead of findings.
+        repeated = {'c': {**summary['c'], 'runs': 3, 'false_positives': 3}}
+        self.assertFalse(reviewer_evaluation.compare(summary, repeated)['accepted'])
+        self.assertFalse(reviewer_evaluation.compare({'c': {**summary['c'], 'unverified_material': 2}}, summary)['accepted'])
+
     def test_review_quality_scoring_counts_found_missed_and_false_positives(self):
         score = reviewer_evaluation.score
         cited = {'severity': 'P2', 'path': 'src/a.py', 'line': 1, 'message': 'Direct DB access',

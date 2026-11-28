@@ -90,6 +90,7 @@ def get_adapter(name):
     from .codex import CodexAdapter
     from .claude import ClaudeAdapter
     from .copilot import CopilotAdapter
-    backends = {"codex": CodexAdapter, "claude": ClaudeAdapter, "copilot": CopilotAdapter}
+    from .deepseek import DeepSeekAdapter
+    backends = {"codex": CodexAdapter, "claude": ClaudeAdapter, "copilot": CopilotAdapter, "deepseek": DeepSeekAdapter}
     if name not in backends: raise ValueError("Unknown explicitly selected backend")
     return backends[name]()

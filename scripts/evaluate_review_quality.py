@@ -6,6 +6,13 @@ the named path), `note` (any finding there) or `pass` (no blocking finding). Wit
 `cite_precedent` a finding only counts when it cites a local precedent with counts ("4 of 4").
 A case may name a `project` folder under --projects-root: a read-only copy of that project
 becomes the workspace before the case files are written over it.
+
+A variant may also carry an `answer_key`: the `expected` findings (path and severity) and the
+`must_not_flag` traps (path plus a pattern of what a wrong finding would say, for example asking
+for a layer the project does not have). Scores then count found and missed expected findings,
+false positives and trap hits. tests/fixtures/review-eval-set.json is the repeatable evaluation
+set; with --baseline the run is compared with an earlier policy's summary.json: a rule change is
+accepted only when neither misses nor false positives increase (docs/evals.md).
 """
 from __future__ import annotations
 
@@ -34,6 +41,12 @@ from scripts.evaluate_production_reasoning import authorize, contract_for, initi
 
 
 CASES = ROOT / 'tests/fixtures/review-quality-cases.json'
+EVAL_SET = ROOT / 'tests/fixtures/review-eval-set.json'
+# Run outputs are local evidence: under the ignored outputs/ folder, never committed.
+OUTPUT_ROOT = ROOT / 'outputs/review-eval'
+# Every case's executed check (contract_for runs it): a structural stand-in for the project's real tests.
+# Findings about it judge the harness, not the reviewed change, so answer-key scoring sets them aside.
+HARNESS_CHECK = 'test_artifact.py'
 BLOCKING = {'P0', 'P1', 'P2'}
 # "154 of 191 handlers", "10 из 10 вызовов": a local precedent stated with counts.
 PRECEDENT = re.compile(r'\b\d+\s+(?:of|out of|из)\s+\d+\b', re.IGNORECASE)
@@ -137,6 +150,69 @@ def score(payloads, expectation):
     return {'found': found, 'false_positives': len([finding for finding in blocking if not located(finding)]) + len(unverified)}
 
 
+def _at(finding, path):
+    found = str(finding.get('path') or '').replace('\\', '/').removeprefix('./')
+    return found == path or found.endswith('/' + path)
+
+
+def _says(row, text):
+    return 'pattern' not in row or re.search(row['pattern'], text) is not None
+
+
+def score_answer_key(payloads, key):
+    """Each finding is a trap hit, a match for an expected finding, or (when blocking) a false positive."""
+    findings = [finding for payload in payloads if isinstance(payload, dict)
+                for finding in payload.get('findings') or [] if isinstance(finding, dict)]
+    unverified = sum(len(payload.get('unverified_material') or []) for payload in payloads if isinstance(payload, dict))
+    found, severity_matches, traps, false_positives, harness = set(), set(), [], 0, 0
+    for finding in findings:
+        if _at(finding, HARNESS_CHECK):
+            harness += 1  # About the harness's own synthetic check, not the reviewed change.
+            continue
+        blocking = finding.get('severity') in BLOCKING
+        text = ' '.join(str(finding.get(name) or '') for name in ('message', 'evidence', 'consequence', 'fix'))
+        trap = next((row['id'] for row in key.get('must_not_flag', []) if blocking and _at(finding, row['path'])
+                     and re.search(row['pattern'], text)), None)
+        if trap:
+            traps.append(trap)
+            false_positives += 1
+            continue
+        match = next((row for row in key.get('expected', []) if _at(finding, row['path'])
+                      and (blocking or row['severity'] not in BLOCKING) and _says(row, text)), None)
+        if match:
+            # One expected defect counts once; restating it in another finding is neither new nor false.
+            found.add(match['id'])
+            if finding.get('severity') == match['severity']:
+                severity_matches.add(match['id'])
+        elif blocking and not any(_at(finding, row['path']) and _says(row, text) for row in key.get('also_valid', [])):
+            false_positives += 1
+    expected = [row['id'] for row in key.get('expected', [])]
+    return {'found': [item for item in expected if item in found], 'missed': [item for item in expected if item not in found],
+            'severity_matches': len(severity_matches), 'false_positives': false_positives,
+            'trap_hits': traps, 'unverified': unverified, 'harness_check_findings': harness}
+
+
+def totals(summary):
+    keys = ('found', 'missed', 'false_positives', 'trap_hits', 'severity_matches', 'unverified_material', 'runs',
+            'unverified_runs')
+    return {key: sum(entry.get(key, 0) for entry in summary.values()) for key in keys}
+
+
+def compare(current, baseline):
+    """The acceptance rule for a review or implementation rule change, on the same evaluation set.
+
+    Both runs must cover the same cases with the same number of runs each, so fewer repeats cannot
+    look better; a policy may not trade findings for unverified items either."""
+    now, before = totals(current), totals(baseline)
+    same_runs = set(current) == set(baseline) and all(current[case]['runs'] == baseline[case]['runs'] for case in current)
+    accepted = (same_runs and not now['unverified_runs'] and now['missed'] <= before['missed']
+                and now['false_positives'] <= before['false_positives']
+                and now['unverified_material'] <= before['unverified_material'])
+    return {'accepted': accepted, 'same_runs': same_runs, 'current': now, 'baseline': before,
+            'rule': ('accepted only if misses, false positives and unverified items do not increase '
+                     'on the same cases and runs')}
+
+
 def summarize(rows, rubric):
     """Per case: found and missed runs on finding variants, false positives on every variant."""
     summary = {}
@@ -147,7 +223,18 @@ def summarize(rows, rubric):
         if not row['verified']:
             entry['unverified_runs'] += 1
             continue
-        result = score(row['payloads'], rubric[str(row['number'])])
+        expectation = rubric[str(row['number'])]
+        if 'answer_key' in expectation:
+            result = score_answer_key(row['payloads'], expectation['answer_key'])
+            entry['found'] += len(result['found'])
+            entry['missed'] += len(result['missed'])
+            entry['false_positives'] += result['false_positives']
+            for name, value in (('trap_hits', len(result['trap_hits'])), ('severity_matches', result['severity_matches']),
+                                ('unverified_material', result['unverified']),
+                                ('harness_check_findings', result['harness_check_findings'])):
+                entry[name] = entry.get(name, 0) + value
+            continue
+        result = score(row['payloads'], expectation)
         entry['false_positives'] += result['false_positives']
         if result['found'] is True:
             entry['found'] += 1
@@ -220,7 +307,7 @@ def review_candidate(output, executable, backend, number, case, variant, *, proj
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, required=True, help='Fresh disposable output folder')
+    parser.add_argument('--output', type=Path, help='Fresh disposable output folder (default: a new one under outputs/)')
     parser.add_argument('--executable', type=Path, required=True, help='Existing local reviewer CLI executable')
     parser.add_argument('--backend', choices=('codex', 'claude'), default='codex', help='CLI protocol of --executable')
     parser.add_argument('--cases', type=Path, default=CASES, help='Case file (keep answer keys outside reviewed projects)')
@@ -229,7 +316,14 @@ def main():
     parser.add_argument('--repeat', type=int, default=1, help='Review every candidate this many times to see variance')
     parser.add_argument('--blind', action='store_true', help='Also run the blind pass and merge its findings')
     parser.add_argument('--workers', type=int, default=2)
+    parser.add_argument('--eval-set', action='store_true', help='Use the repeatable evaluation set with answer keys')
+    parser.add_argument('--baseline', type=Path, help="An earlier policy's summary.json on the same cases, to compare")
     args = parser.parse_args()
+    if args.eval_set:
+        args.cases = EVAL_SET
+    if args.output is None:
+        import datetime
+        args.output = OUTPUT_ROOT / datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     cases = [case for case in decode_json(args.cases.read_bytes())['cases'] if not args.case or case['id'] in args.case]
     if args.case and {case['id'] for case in cases} != set(args.case):
         raise SystemExit('Unknown case ID')
@@ -239,7 +333,9 @@ def main():
     jobs = list(enumerate((pair for _ in range(args.repeat) for pair in variants), 1))
     args.output.mkdir(parents=True)
     # Keep the variant identities and expectations outside every reviewed workspace and packet.
-    rubric = {str(number): variant['expectation'] for number, (_, variant) in jobs}
+    rubric = {str(number): {**variant['expectation'],
+                            **({'answer_key': variant['answer_key']} if 'answer_key' in variant else {})}
+              for number, (_, variant) in jobs}
     save(args.output / 'rubric.json', rubric)
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = [pool.submit(review_candidate, args.output, args.executable, args.backend, number, case, variant,
@@ -251,7 +347,17 @@ def main():
     save(args.output / 'summary.json', summary)
     for case_id, entry in summary.items():
         print(f"{case_id}: found {entry['found']}, missed {entry['missed']}, false positives {entry['false_positives']}, "
-              f"runs {entry['runs']}" + (f", unverified {entry['unverified_runs']}" if entry['unverified_runs'] else ''))
+              f"runs {entry['runs']}" + (f", unverified {entry['unverified_runs']}" if entry['unverified_runs'] else '')
+              + (f", trap hits {entry['trap_hits']}" if 'trap_hits' in entry else ''))
+    from ase.framework import stamp
+    save(args.output / 'policy.json', stamp())
+    print('totals:', totals(summary), '->', args.output)
+    if args.baseline:
+        verdict = compare(summary, decode_json(args.baseline.read_bytes()))
+        save(args.output / 'comparison.json', verdict)
+        print(('accepted' if verdict['accepted'] else 'rejected') + ': ' + verdict['rule'])
+        if not verdict['accepted']:
+            return 2
     return 0 if all(row['verified'] for row in results) else 3
 
 

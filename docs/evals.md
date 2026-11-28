@@ -72,3 +72,38 @@ Omit `--run-live` to prepare packets only, or repeat `--case` to select a subset
 output directory each time. An independent grader compares each `final.json` with the scenario
 source and `rubric.json`. Check the actual plan and owner question even when the decision label
 matches. Treat session or input failures separately from decision scores.
+
+## Review-quality evaluation set
+
+The decision evals above measure lead behaviour. Review quality has its own repeatable,
+model-based evaluation: `tests/fixtures/review-eval-set.json` holds synthetic change sets in
+three common stacks (a C# service, a TypeScript UI and Python jobs), each with an answer key the
+reviewer never sees: the expected findings with their severity, and explicit "must not flag"
+traps such as a pattern that is the project's own local precedent, an external-protocol
+constant kept private, or a direct data-context use the project uses everywhere. One case has
+no expected finding and measures false positives only.
+
+```powershell
+python scripts/evaluate_review_quality.py --eval-set --backend claude --executable <reviewer CLI>
+python scripts/evaluate_review_quality.py --eval-set --backend claude --executable <reviewer CLI> --baseline <earlier summary.json>
+```
+
+Each candidate goes through the same request builder and runner a real review uses, without
+hints. The run scores found and missed expected findings, false positives (blocking findings
+that are neither expected nor allowed) and trap hits, and writes everything to a new folder
+under the ignored `outputs/review-eval/`, never committed. `policy.json` records the framework
+commit and policy hash of the run.
+
+The rule: a change to review or implementation rules is accepted only if, on this set, misses
+do not increase and false positives do not increase compared with the previous policy (run the
+same command from a worktree of the previous commit for the baseline). Both runs need the same
+cases and the same number of runs per case, and unverified items may not increase either, so a
+policy cannot look better by running less or by answering "unverified" instead of finding.
+
+An expected finding counts once, when a blocking finding at its path says what its `pattern`
+describes; another blocking finding in that file is a false positive unless the key lists it
+under `also_valid`. Findings about the harness's own structural check (`test_artifact.py`) are
+counted apart: they judge the harness, not the change. Edit an answer key only to fix the key
+(a real defect it missed), never to fit one run's wording, and say so in the run's report. The deterministic fixture
+tests in `tests/test_production_reasoning_scenarios.py` stay the fast gate on every change;
+this evaluation is the slower model-based one, run on demand and before publishing.

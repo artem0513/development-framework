@@ -234,6 +234,13 @@ def parser():
         if name == "request":
             command.add_argument("--path", default="/")
             command.add_argument("--method", choices=("GET", "HEAD"), default="GET")
+    doctor = commands.add_parser("doctor", help="Self-check after a framework update: installed files, skill mirrors, "
+                                 "policy, fixture tests and public-content checks; lists stale verdicts and notes to re-verify")
+    doctor.add_argument("--install-home", type=Path, help="Tooling home of the installation (default: this package's)")
+    doctor.add_argument("--source", type=Path, help="Framework source checkout for the fixture and public-content checks")
+    doctor.add_argument("--previous-commit", help="Framework commit before the update, for the report")
+    doctor.add_argument("--skip-tests", action="store_true", help="Skip the fixture and public-content checks")
+    doctor.add_argument("--text", action="store_true", help="Print a human summary instead of JSON")
     ci = commands.add_parser("ci-check", help="Deterministic merge checks for a trusted CI runner (rules from the base revision)")
     ci.add_argument("--base", required=True, help="Base revision, e.g. origin/main")
     ci.add_argument("--head", default="HEAD")
@@ -581,6 +588,30 @@ def _new_contract(path):
     return contract
 
 
+def _doctor_inputs(args):
+    """This package, its installation home and the framework source the installed commit came from."""
+    from .doctor import installation
+    from .framework import package_root
+    package = package_root()
+    home = args.install_home
+    if home is None and package.name == "runtime" and package.parent.name == "autonomous-se":
+        home = package.parent.parent  # The installer's layout: <home>/autonomous-se/runtime/ase.
+    from .doctor import vouching_source
+    record = installation(home) if home is not None else None
+    source, note = args.source, None
+    if source is None and (package / ".git").exists():
+        source = package
+    if record and (source is None or args.source is not None):
+        # Only a clean checkout at the installed commit can vouch for this installation's tests,
+        # an explicitly named checkout included.
+        candidate = args.source or record.get("framework_source_root")
+        source, note = vouching_source(Path(candidate) if candidate else None, record.get("framework_commit"),
+                                       record.get("framework_dirty"))
+    project = args.project or (args.repo if args.repo != "." or record is None else None)
+    return {"home": home, "package_root": package, "source_root": source.resolve() if source else None,
+            "source_note": note, "project": project, "previous_commit": args.previous_commit, "state_home": args.home}
+
+
 def _state_project(args):
     """A UUID selects within the repo/cwd registry, never a filesystem root."""
     if args.project:
@@ -674,6 +705,14 @@ def main(argv=None):
             if args.text:
                 print(ci_check.summary_text(result))
                 return 0 if result["status"] == "PASS" else 2
+        elif cmd == "doctor":
+            from . import doctor
+            result = doctor.run(**_doctor_inputs(args), run_tests=not args.skip_tests)
+            if args.text:
+                print(doctor.text(result))
+                return 0 if result["status"] == "COMPLETE" else 2
+            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+            return 0 if result["status"] == "COMPLETE" else 2
         elif cmd == "credentials":
             result = _credential_command(args)
         elif cmd == "project" and args.action != "export":

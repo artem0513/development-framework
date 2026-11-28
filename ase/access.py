@@ -70,7 +70,8 @@ def _profile_lock(vault, ref, deadline, cancel):
 
 
 def _env(profile):
-    result = dict(os.environ)
+    from .child_environment import child_environment
+    result = child_environment()  # a profile's own secrets only, never a backend's API key
     for name, field in profile.get('env', {}).items():
         result[name] = profile['secrets'][field]
     return result

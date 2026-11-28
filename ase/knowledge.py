@@ -84,6 +84,8 @@ class Knowledge:
                 value["topic"], value["statement"], observed.isoformat(), json.dumps(refs), task_id, repository, repository_revision, predecessor, now()))
             claim_id = row.lastrowid
             self._save("knowledge_claim", str(claim_id), metadata)
+            from .memory.reverify import stamp_note
+            stamp_note(db, "claim:" + str(claim_id))
             if "dependencies" in value:
                 dependencies = []
                 for edge in self._list(value["dependencies"], "dependencies"):

@@ -188,9 +188,22 @@ class PortableInstallTests(unittest.TestCase):
                 manifest.write_bytes(data)
                 self.assertEqual(installer.read_manifest(manifest), json.loads(text))
         manifest = self.base / "utf-16le-bom.json"
-        with contextlib.redirect_stdout(io.StringIO()) as output:
+        complete = {"status": "COMPLETE", "old_commit": "unknown", "new_commit": "unknown", "checks": [],
+                    "failing": [], "unavailable": [], "stale_tasks": [], "memory_reverify": []}
+        # The post-update self-check is covered in test_framework_update; here only its outcome matters.
+        with (contextlib.redirect_stdout(io.StringIO()) as output, contextlib.redirect_stderr(io.StringIO()),
+              patch.object(installer, "post_update_check", return_value=complete)):
             installer.main(["--apply-manifest", str(manifest)])
-        self.assertEqual(json.loads(output.getvalue())["scope"], "project")
+        result = json.loads(output.getvalue())
+        self.assertEqual((result["scope"], result["update_status"]), ("project", "COMPLETE"))
+        incomplete = {**complete, "status": "INCOMPLETE", "failing": ["runtime policy matches the skill text"]}
+        reapply = self.base / "reapply.json"
+        reapply.write_text(json.dumps(self.plan(["codex"])), encoding="utf-8")
+        with (contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as summary,
+              patch.object(installer, "post_update_check", return_value=incomplete), self.assertRaises(SystemExit) as stop):
+            installer.main(["--apply-manifest", str(reapply)])
+        self.assertEqual(stop.exception.code, 2)
+        self.assertIn("not complete: runtime policy matches the skill text", summary.getvalue())
         self.assertTrue((self.project / "AGENTS.md").is_file())
         before = snapshot(self.base)
         for name, data in (("bomless-utf-16", text.encode("utf-16-le")), ("not-json", b"\xef\xbb\xbfnot json"),

@@ -193,7 +193,9 @@ class Publisher:
         # another repository. On-disk user/repository configuration, hooks and
         # credential helpers remain active; process-supplied GIT_* overrides do
         # not belong to this selected workspace's publishing authorization.
-        return {key: value for key, value in os.environ.items() if not key.upper().startswith("GIT_")}
+        # Hooks run project code: no backend API key reaches them.
+        from .child_environment import child_environment
+        return {key: value for key, value in child_environment().items() if not key.upper().startswith("GIT_")}
 
     def _git(self, *args, check=True, strip=True, env=None):
         result = subprocess.run(self._argv(*args), cwd=self.repo, stdin=subprocess.DEVNULL,

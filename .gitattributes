@@ -1,0 +1,3 @@
+# Generated runtime data is checked and hashed byte for byte (doctor, the verdict stamp):
+# every checkout and export must carry the bytes build_assets wrote, never CRLF.
+ase/data/*.json text eol=lf

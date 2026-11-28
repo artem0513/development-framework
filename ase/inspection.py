@@ -46,7 +46,8 @@ def trusted_git():
 
 
 def _environment():
-    env = {key: value for key, value in os.environ.items() if not key.upper().startswith("GIT_")}
+    from .child_environment import child_environment
+    env = {key: value for key, value in child_environment().items() if not key.upper().startswith("GIT_")}
     env.update({"GIT_CONFIG_SYSTEM": os.devnull, "GIT_CONFIG_GLOBAL": os.devnull,
                 "GIT_CONFIG_NOSYSTEM": "1", "GIT_ALLOW_PROTOCOL": "",
                 "GIT_NO_LAZY_FETCH": "1", "GIT_TERMINAL_PROMPT": "0"})

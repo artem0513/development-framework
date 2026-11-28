@@ -588,6 +588,12 @@ class GateService:
             result['rejected_reasons'] = list(dict.fromkeys(result['rejected_reasons'] + part_rejected))
             result['reasons'] = list(dict.fromkeys(result['reasons'] + part_rejected))
             result['status'] = 'REJECTED'
+        from .framework import STAMP_FIELD, stale_verdicts, stamp
+        result[STAMP_FIELD] = stamp()
+        stale = stale_verdicts(self.store, task, stage_id, current=result[STAMP_FIELD])
+        if stale:
+            result['stale_verdicts'] = stale
+            extra.extend(row['reason'] for row in stale)
         from .delegations import DelegationRegistry
         extra.extend(DelegationRegistry(self.store).closure_blockers(task_id, stage_id=stage_id))
         readiness = tasks.readiness(task_id, stage_id=stage_id)

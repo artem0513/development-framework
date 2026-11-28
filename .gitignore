@@ -6,3 +6,4 @@ outputs/
 *.egg-info/
 build/
 /.codex/config.toml
+ase/data/framework_source.json

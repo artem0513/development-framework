@@ -25,6 +25,8 @@ finding for the owner and, when needed, a draft question for the reporter. Compa
 example or attachment with the actual behavior before deciding. When ticket text and a later
 clarification differ, identify the approving source, the scope of this delivery and who owns the
 remaining obligation. Write no code until the analysis exists and matches the authorized scope.
+When a host request includes `handoff.task_proposal.ancestor_proposals`, use each saved plan
+for its named ancestor stage and apply its relevant decisions within the child task scope.
 
 ## 1. Understand the system before deciding
 
@@ -42,7 +44,33 @@ remaining obligation. Write no code until the analysis exists and matches the au
   docs/ADRs, Git history and PR/issue discussion; mark what is unverified.
 - **Reuse first.** Before adding any mechanism, search for the project's existing one
   (email/notification command, job, transaction pattern, validation, caching, auth check) and use
-  it. Record what you searched and found.
+  it. Record what you searched and found. Adding a case at the project's existing extension point
+  (an exception-to-response mapping, a registry, a switch over types) is reuse, not a shared-service
+  change; a restriction on named shared components applies only to those components. When unsure,
+  offer it to the owner as a plan option; never build a parallel copy. The norm is the project's own
+  maintained code near the change: new code in an existing file follows its siblings' conventions,
+  wraps an existing API in error handling only as its other callers do, and parses an external API
+  the way the project already parses it. Extra defensive code needs a concrete trigger on the base
+  branch; code whose only effect is in another, unmerged change does not belong here. Keep the base
+  structure of a changed method: no pre-declared locals or re-indented unchanged code only to fit new
+  control flow.
+- **Before and while coding.**
+  - *Remove and see.* For every new catch, guard, fallback, conversion or check, state what breaks on
+    the base branch if it is removed. If nothing breaks, do not add it.
+  - *Proportional diff.* Before coding, estimate the change size from the requirement. If the actual
+    diff grows clearly larger, stop and explain the difference in the plan instead of continuing.
+  - *Ask before working around.* If the simplest correct change touches code a rule or instruction
+    seems to protect, stop and ask the owner with both options; never build a parallel mechanism to
+    avoid the question.
+  - *Shared files in a task set.* When several branches or PRs of one task set change the same file,
+    detect it early (for example `git merge-tree` between the open branches), name one branch as the
+    owner of that file's change and ask the owner for the merge order before both are finished.
+  - *Readable classifications.* Write a classification as an explicit named set with one case per line;
+    never introduce a constant to bound an impossible value. Keep exception and model types plain
+    unless the project's own precedent puts logic there.
+  - *Existing tooling first.* When the project configures analyzers, linters or formatters, run them
+    on the changed files and declare that run as an evidence check so its output reaches the
+    reviewers. Never install or configure new tools.
 - **Precedent.** Follow the team's established way unless evidence shows it no longer fits. An
   explicit example-search opt-out skips deliberate example search while preserving inspection of
   actual callers and dependencies. On a
@@ -55,6 +83,13 @@ remaining obligation. Write no code until the analysis exists and matches the au
   helper or dependency. Follow applicable project conventions and nearby maintained code. Choose
   clear names and control flow the team can read without chasing unnecessary wrappers or branches.
   Keep a related refactor within the changed flow and check the affected callers.
+- **Types of a recognisable kind.** Before creating a new exception, DTO or model, enum,
+  constants holder, extension or helper class, mapper, validator or interface, search where the
+  project keeps existing types of that kind (same base type, suffix or role) and follow the
+  majority folder and namespace. When several homes exist, follow the closest siblings: same
+  layer and same role (for example exceptions the web layer maps to HTTP responses). The new
+  type's first consumer does not decide its home; an example of the behavior is not an example
+  of where that kind lives. A different placement needs a one-line reason in the technical plan.
 - **Review evidence.** In the technical plan name the existing path, the chosen class or method,
   the relevant precedent and why the change belongs there. If the search finds no suitable
   precedent, record where you looked. Include the few unchanged source files decisive to the review
@@ -104,6 +139,10 @@ For proposed background work, separate the schedule from delivery guarantees. Ch
 platform contract and deployment configuration for relevant replica count, retries and overlap.
 If those facts are unavailable, state them as conditions on the recommendation. A time trigger
 alone establishes no guarantee that a job will complete exactly once.
+For changed handler registration, invocation or result handling, run a check through the actual
+dispatcher and observe the durable state or consumer result. Check the arguments passed to the
+handler and what consumes its output. A local fixture may replace external infrastructure while
+keeping the application dispatch path intact.
 
 Locks (local or distributed), new or conditional transactions, atomic claims, retries, timeouts or
 waits, queues, caches, polling, version/incident IDs, new columns/tables/migrations, and optional or nullable DI
@@ -127,6 +166,8 @@ explicit question to the developer or lead, with its reason; never keep it silen
 For a persisted key or wire-format correction, verify existing records and old callers as well
 as new writes. For affected response fields, cover omission, null, false and zero where the
 contract gives them distinct meanings.
+When reusing shared logic that requires new fields or values, exercise older valid inputs at the
+changed entry point, including supported records with missing fields or retired values.
 
 - Before changing a service boundary format, check the current producer and consumer contract.
   Compare maintained neighbors using that contract when example search is allowed. Preserve
@@ -260,8 +301,14 @@ State the chosen form, why not simpler and why not more complex.
   separate defect X (evidence); outside this ticket, left untouched. Open a separate task?"), with no
   fix, branch or PR, current or separate ([out-of-scope discovery](../SKILL.md#out-of-scope-discovery)).
 - Tests cover the acceptance criteria and category (a) risks, written, not promised; prove the
-  original failure through the real consumer path where practical. When no test project covers the
-  changed layer, add the smallest one to the solution (your call) instead of leaving a test plan.
+  original failure through the real consumer path where practical.
+- Where tests go follows what the project already has. When an existing test project covers the
+  changed layer, add the tests there and publish them with the change. When the project has no
+  tests, or none for the changed layer, still write and run the tests the task needs, but keep them
+  local: never stage, commit, push or put them in a PR, and say so in one report line ("tests run
+  locally, not added: the project has no tests for this layer"). Adding a test project or test
+  infrastructure is the owner's decision; where the project has tests elsewhere, ask in one line
+  whether to add them. Local tests remain the task's executed evidence and adequacy proof.
   No tests for invented races, and no test volume several times larger than the change.
 - Required side effects (messages, payments) avoid duplicates on retry and keep related writes in
   one existing transaction where the context allows (an instance of 2(a)). Prefer a reliable signal

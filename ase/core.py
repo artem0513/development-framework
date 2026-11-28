@@ -19,6 +19,7 @@ import uuid
 from urllib.parse import quote, quote_plus
 
 from .store import now
+from .child_environment import child_environment
 from .native_paths import logical_path, state_io
 
 PROTECTED = [".github/workflows/*", ".codex/*", ".agents/*", "AGENTS.md", ".gitmodules", ".githooks/*"]
@@ -284,7 +285,7 @@ def execute(argv, cwd, log, timeout=300, *, env=None, cancel_requested=None, sen
                     proc = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=spool, stderr=subprocess.STDOUT,
                                             shell=False, start_new_session=os.name != "nt",
                                             # Untracked __pycache__ is outside the source fingerprint; don't load it (env-honouring Python only).
-                                            env={**(os.environ if env is None else env), "PYTHONDONTWRITEBYTECODE": "1",
+                                            env={**(child_environment() if env is None else env), "PYTHONDONTWRITEBYTECODE": "1",
                                                  "PYTHONPYCACHEPREFIX": pycache})
                 job, settled = None, False
                 try:
@@ -431,6 +432,8 @@ class LocalRecords:
         with self.store.db:
             row = self.store.db.execute("INSERT INTO sessions(task_id,started,ended,summary,important_decisions,unresolved_questions) VALUES(?,?,?,?,?,?)", (
                 task_id, stamp, stamp, redact(summary), redact(decision), redact(unresolved)))
+            from .memory.reverify import stamp_note
+            stamp_note(self.store.db, "session:" + str(row.lastrowid))
         return {"session_id": row.lastrowid, "task_id": task_id, "summary": redact(summary), "important_decisions": redact(decision), "unresolved_questions": redact(unresolved)}
 
     def daily(self, date=None):

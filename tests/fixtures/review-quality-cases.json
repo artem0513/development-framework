@@ -1547,6 +1547,149 @@
           }
         }
       ]
+    },
+    {
+      "id": "pair-exception-home-shared",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "When the catalog connector rejects the stored credentials, sync must fail with a new ConnectorRejectedException that the API answers with 502 Bad Gateway. Other outcomes are unchanged.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ],
+            "expected": "A rejected pull throws ConnectorRejectedException and the API maps it to 502; other outcomes keep their status."
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/Domain/Exceptions/NotFoundException.cs": "namespace Shop.Domain.Exceptions;\n\npublic sealed class NotFoundException(string message) : Exception(message);\n",
+        "src/Domain/Exceptions/ForbiddenException.cs": "namespace Shop.Domain.Exceptions;\n\npublic sealed class ForbiddenException(string message) : Exception(message);\n",
+        "src/Domain/Exceptions/ValidationException.cs": "namespace Shop.Domain.Exceptions;\n\npublic sealed class ValidationException(string message) : Exception(message);\n",
+        "src/Domain/Exceptions/ConflictException.cs": "namespace Shop.Domain.Exceptions;\n\npublic sealed class ConflictException(string message) : Exception(message);\n",
+        "src/Web/ErrorMapping.cs": "namespace Shop.Web;\n\nusing System.Net;\nusing Shop.Domain.Exceptions;\n\npublic static class ErrorMapping\n{\n    public static HttpStatusCode StatusFor(Exception error) => error switch\n    {\n        NotFoundException => HttpStatusCode.NotFound,\n        ForbiddenException => HttpStatusCode.Forbidden,\n        ValidationException => HttpStatusCode.BadRequest,\n        ConflictException => HttpStatusCode.Conflict,\n        _ => HttpStatusCode.InternalServerError\n    };\n}\n",
+        "src/Application/Catalog/ICatalogConnector.cs": "namespace Shop.Application.Catalog;\n\npublic interface ICatalogConnector\n{\n    Task<CatalogSnapshot?> PullAsync(string catalogId, CancellationToken ct);\n}\n\npublic sealed record CatalogSnapshot(string Id, bool Rejected);\n",
+        "src/Application/Catalog/CatalogSyncService.cs": "namespace Shop.Application.Catalog;\n\nusing Shop.Domain.Exceptions;\n\npublic sealed class CatalogSyncService(ICatalogConnector connector)\n{\n    public async Task SyncAsync(string catalogId, CancellationToken ct)\n    {\n        var snapshot = await connector.PullAsync(catalogId, ct);\n        if (snapshot is null)\n            throw new NotFoundException(\"Catalog not found\");\n    }\n}\n",
+        "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"*.cs\"))\n        for needle in (\"class ConnectorRejectedException\", \"ConnectorRejectedException => HttpStatusCode.BadGateway\",\n                       \"snapshot.Rejected\"):\n            self.assertIn(needle, text)\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/Application/Catalog/ConnectorRejectedException.cs": "namespace Shop.Application.Catalog;\n\npublic sealed class ConnectorRejectedException(string message) : Exception(message);\n",
+            "src/Application/Catalog/CatalogSyncService.cs": "namespace Shop.Application.Catalog;\n\nusing Shop.Domain.Exceptions;\n\npublic sealed class CatalogSyncService(ICatalogConnector connector)\n{\n    public async Task SyncAsync(string catalogId, CancellationToken ct)\n    {\n        var snapshot = await connector.PullAsync(catalogId, ct);\n        if (snapshot is null)\n            throw new NotFoundException(\"Catalog not found\");\n        if (snapshot.Rejected)\n            throw new ConnectorRejectedException(\"Catalog connector rejected the credentials\");\n    }\n}\n",
+            "src/Web/ErrorMapping.cs": "namespace Shop.Web;\n\nusing System.Net;\nusing Shop.Domain.Exceptions;\nusing Shop.Application.Catalog;\n\npublic static class ErrorMapping\n{\n    public static HttpStatusCode StatusFor(Exception error) => error switch\n    {\n        NotFoundException => HttpStatusCode.NotFound,\n        ForbiddenException => HttpStatusCode.Forbidden,\n        ValidationException => HttpStatusCode.BadRequest,\n        ConflictException => HttpStatusCode.Conflict,\n        ConnectorRejectedException => HttpStatusCode.BadGateway,\n        _ => HttpStatusCode.InternalServerError\n    };\n}\n"
+          },
+          "expectation": {
+            "disposition": "block",
+            "path": "src/Application/Catalog/ConnectorRejectedException.cs",
+            "cite_precedent": true,
+            "reason": "4 of 4 HTTP-mapped exceptions live in src/Domain/Exceptions (namespace Shop.Domain.Exceptions), which ErrorMapping already imports; the new one sits next to its first consumer with no stated reason. Fix: move it there and update usings."
+          }
+        }
+      ]
+    },
+    {
+      "id": "pair-exception-home-per-feature",
+      "contract": {
+        "profile": "software",
+        "risk": "LOW",
+        "request": "When the catalog connector rejects the stored credentials, sync must fail with a new ConnectorRejectedException that the API answers with 502 Bad Gateway. Other outcomes are unchanged.",
+        "scope": {
+          "resources": [
+            "src"
+          ],
+          "effects": [
+            "file_write",
+            "command"
+          ]
+        },
+        "acceptance": [
+          {
+            "id": "BEHAVIOR",
+            "mandatory": true,
+            "evidence_ids": [
+              "behavior"
+            ],
+            "expected": "A rejected pull throws ConnectorRejectedException and the API maps it to 502; other outcomes keep their status."
+          }
+        ],
+        "evidence": [
+          {
+            "id": "behavior",
+            "kind": "test",
+            "required": true
+          }
+        ],
+        "stages": [
+          {
+            "id": "fix",
+            "acceptance_ids": [
+              "BEHAVIOR"
+            ],
+            "depends_on": []
+          }
+        ],
+        "unknowns": [],
+        "review_format": {
+          "version": 2
+        }
+      },
+      "files": {
+        "src/Application/Orders/OrderNotFoundException.cs": "namespace Shop.Application.Orders;\n\npublic sealed class OrderNotFoundException(string message) : Exception(message);\n",
+        "src/Application/Billing/InvoiceForbiddenException.cs": "namespace Shop.Application.Billing;\n\npublic sealed class InvoiceForbiddenException(string message) : Exception(message);\n",
+        "src/Application/Accounts/AccountValidationException.cs": "namespace Shop.Application.Accounts;\n\npublic sealed class AccountValidationException(string message) : Exception(message);\n",
+        "src/Application/Shipping/ShipmentConflictException.cs": "namespace Shop.Application.Shipping;\n\npublic sealed class ShipmentConflictException(string message) : Exception(message);\n",
+        "src/Application/Catalog/CatalogNotFoundException.cs": "namespace Shop.Application.Catalog;\n\npublic sealed class CatalogNotFoundException(string message) : Exception(message);\n",
+        "src/Web/ErrorMapping.cs": "namespace Shop.Web;\n\nusing System.Net;\nusing Shop.Application.Orders;\nusing Shop.Application.Billing;\nusing Shop.Application.Accounts;\nusing Shop.Application.Shipping;\nusing Shop.Application.Catalog;\n\npublic static class ErrorMapping\n{\n    public static HttpStatusCode StatusFor(Exception error) => error switch\n    {\n        OrderNotFoundException => HttpStatusCode.NotFound,\n        InvoiceForbiddenException => HttpStatusCode.Forbidden,\n        AccountValidationException => HttpStatusCode.BadRequest,\n        ShipmentConflictException => HttpStatusCode.Conflict,\n        CatalogNotFoundException => HttpStatusCode.NotFound,\n        _ => HttpStatusCode.InternalServerError\n    };\n}\n",
+        "src/Application/Catalog/ICatalogConnector.cs": "namespace Shop.Application.Catalog;\n\npublic interface ICatalogConnector\n{\n    Task<CatalogSnapshot?> PullAsync(string catalogId, CancellationToken ct);\n}\n\npublic sealed record CatalogSnapshot(string Id, bool Rejected);\n",
+        "src/Application/Catalog/CatalogSyncService.cs": "namespace Shop.Application.Catalog;\n\npublic sealed class CatalogSyncService(ICatalogConnector connector)\n{\n    public async Task SyncAsync(string catalogId, CancellationToken ct)\n    {\n        var snapshot = await connector.PullAsync(catalogId, ct);\n        if (snapshot is null)\n            throw new CatalogNotFoundException(\"Catalog not found\");\n    }\n}\n",
+        "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"*.cs\"))\n        for needle in (\"class ConnectorRejectedException\", \"ConnectorRejectedException => HttpStatusCode.BadGateway\",\n                       \"snapshot.Rejected\"):\n            self.assertIn(needle, text)\n"
+      },
+      "variants": [
+        {
+          "changes": {
+            "src/Application/Catalog/ConnectorRejectedException.cs": "namespace Shop.Application.Catalog;\n\npublic sealed class ConnectorRejectedException(string message) : Exception(message);\n",
+            "src/Application/Catalog/CatalogSyncService.cs": "namespace Shop.Application.Catalog;\n\npublic sealed class CatalogSyncService(ICatalogConnector connector)\n{\n    public async Task SyncAsync(string catalogId, CancellationToken ct)\n    {\n        var snapshot = await connector.PullAsync(catalogId, ct);\n        if (snapshot is null)\n            throw new CatalogNotFoundException(\"Catalog not found\");\n        if (snapshot.Rejected)\n            throw new ConnectorRejectedException(\"Catalog connector rejected the credentials\");\n    }\n}\n",
+            "src/Web/ErrorMapping.cs": "namespace Shop.Web;\n\nusing System.Net;\nusing Shop.Application.Orders;\nusing Shop.Application.Billing;\nusing Shop.Application.Accounts;\nusing Shop.Application.Shipping;\nusing Shop.Application.Catalog;\n\npublic static class ErrorMapping\n{\n    public static HttpStatusCode StatusFor(Exception error) => error switch\n    {\n        OrderNotFoundException => HttpStatusCode.NotFound,\n        InvoiceForbiddenException => HttpStatusCode.Forbidden,\n        AccountValidationException => HttpStatusCode.BadRequest,\n        ShipmentConflictException => HttpStatusCode.Conflict,\n        CatalogNotFoundException => HttpStatusCode.NotFound,\n        ConnectorRejectedException => HttpStatusCode.BadGateway,\n        _ => HttpStatusCode.InternalServerError\n    };\n}\n"
+          },
+          "expectation": {
+            "disposition": "pass",
+            "reason": "5 of 5 mapped exceptions live in their own feature folder; the Catalog folder is the project's home for this one."
+          }
+        }
+      ]
     }
   ]
 }

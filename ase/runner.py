@@ -19,6 +19,7 @@ import time
 import uuid
 
 from .adapters import WINDOWS_COMMAND_LINE_BUDGET
+from .child_environment import backend_environment, child_environment
 from .protocol import canonical, decode_json, normalized, sha256, validate_packet, validate_payload, DEFAULT_PACKET_BYTES, MAX_DECLARED_PACKET_BYTES
 
 
@@ -135,7 +136,7 @@ def capture_process(argv, cwd, *, timeout, max_output_bytes, input_bytes=None, e
                 process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE if input_bytes is not None else subprocess.DEVNULL,
                     stdout=stdout, stderr=stderr, shell=False, start_new_session=os.name != "nt",
                     # Untracked __pycache__ is outside the source fingerprint; don't load it (env-honouring Python only).
-                    env={**(os.environ if env is None else env), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPYCACHEPREFIX": pycache})
+                    env={**(child_environment() if env is None else env), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONPYCACHEPREFIX": pycache})
             job = _WindowsJob(process)
             if input_bytes is not None:
                 def send_input():
@@ -308,6 +309,8 @@ class Runner:
                    "evidence_kind": "protocol_only" if caps.get("protocol_only") else "independent_cli",
                    "executable": caps["executable"], "executable_sha256": caps["executable_sha256"],
                    "version": caps["version"], "capabilities": caps, "artifacts": artifacts}
+        from .framework import STAMP_FIELD, stamp
+        receipt[STAMP_FIELD] = stamp()  # the framework commit and policy this verdict is produced under
         if not caps.get("available"):
             result = normalized(blocker=caps.get("blocker") or "BACKEND_UNAVAILABLE")
             receipt.update(pid=None, exit_code=None, status="BLOCKED", error=result["blocker"],
@@ -328,6 +331,8 @@ class Runner:
             cap = self.config.get("max_output_bytes", 1048576)
             process = capture_process(call["argv"], cwd, timeout=timeout, max_output_bytes=cap, input_bytes=input_bytes,
                                       extra_output_paths=[root / 'final.json'], cancel_requested=cancel_requested, deadline=deadline,
+                                      # Backend API keys only reach a worker its adapter pinned (see child_environment).
+                                      env=backend_environment(adapter.name) if caps.get('key_delivery') is True else child_environment(),
                                       **({'launch_guard': launch_guard} if launch_guard is not None else {}))
             stdout, stderr = process.pop("stdout"), process.pop("stderr")
             artifacts.update(stdout=_write(root / "stdout.jsonl", stdout), stderr=_write(root / "stderr.log", stderr))
@@ -413,7 +418,15 @@ def _verify_capture(receipt, *, expected_bindings, require_current_policy, requi
     if 'stdin' in data:
         argv = receipt.get('argv', [])
         argument_delivery = not data['stdin'] and argv[-2:] == ['-p', prompt]
-        if receipt['backend'] == 'codex':
+        if receipt['backend'] == 'deepseek':
+            caps = receipt.get('capabilities', {})
+            # The pinned interpreter must have run the worker whose hash the probe recorded.
+            worker, digest = caps.get('worker'), caps.get('worker_sha256')
+            delivered = (data['stdin'] == prompt.encode('utf-8') and isinstance(worker, str)
+                         and Path(worker).name == 'deepseek_worker.py' and Path(worker).parent.name == 'adapters'
+                         and isinstance(digest, str) and re.fullmatch('[0-9a-f]{64}', digest) is not None
+                         and argv[1:3] == ['-I', worker])
+        elif receipt['backend'] == 'codex':
             delivered = data['stdin'] == prompt.encode('utf-8')
         elif receipt['backend'] == 'claude':
             # Current Claude captures read the prompt from stdin after a bare -p; older receipts

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import time
 import threading
 import tempfile
@@ -1154,7 +1155,11 @@ class WorkflowController:
         from .model_limits import runner_limits
         config = {**runner_limits(contract, self.store.db, backend),
                   **(read_record(self.store.db, "backend_config", backend)["payload"] or {})}
-        executable = config.get("executable") or shutil.which({"codex": "codex", "claude": "claude", "copilot": "copilot"}[backend])
+        if backend == "deepseek" and not config.get("executable"):
+            # No agent CLI: this interpreter runs the isolated API worker shipped with the adapter.
+            from .adapters.deepseek import worker_args
+            config = {**config, "executable": sys.executable, "executable_args": worker_args()}
+        executable = config.get("executable") or shutil.which({"codex": "codex", "claude": "claude", "copilot": "copilot"}.get(backend, backend))
         if not executable:
             from .adapters import installed_executable
             executable = installed_executable(backend)

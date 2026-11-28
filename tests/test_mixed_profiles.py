@@ -18,6 +18,7 @@ import uuid
 
 from ase.__main__ import _task_command
 from ase.core import execute
+from ase.framework import STAMP_FIELD, stamp
 from ase.gates import GateService, source_snapshot, stage_checks, verification_context_hash
 from ase.journal import Journal
 from ase import profiles
@@ -95,6 +96,7 @@ class MixedProfileTests(unittest.TestCase):
                 old = read_record(self.store.db, "verification", key)
                 write_record(self.store.db, "verification", key, {"role": role, "execution_id": task_id + "-" + role,
                              "artifact_root": str(self.store.root / "tasks" / task_id / "fixture"), "fixture_task_id": task_id,
+                             STAMP_FIELD: stamp(),
                              "bindings": {"fingerprint": source["fingerprint"], "contract_sha256": task["contract_hash"],
                              "proposal_sha256": task["proposal_hash"], "plan_sha256": plan["plan_hash"],
                              "check_sha256": hash_value(bundle), "workspace_id": self.store.workspace_id,

@@ -21,6 +21,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from ase.project_local import (config_bytes, is_private_path, is_framework_source, validate_local_settings,
                                PRIVATE_BEGIN, PRIVATE_END, _plain_git)
+from ase.framework import (GIT_TIMEOUT_SECONDS, SOURCE_RELATIVE as FRAMEWORK_SOURCE, UNKNOWN, recorded_source,
+                           source_commit)
+
+# FRAMEWORK_SOURCE is generated per install with the source commit; never copied from the checkout.
+PACKAGE_DIRECTORIES = ('ase', 'skills', 'agents', 'docs', 'templates', 'scripts')
 
 BEGIN = "<!-- autonomous-se managed begin -->"
 END = "<!-- autonomous-se managed end -->"
@@ -643,13 +648,45 @@ def _package_file(source):
     relative = source.relative_to(ROOT)
     selected = (source.is_file() and source.suffix != '.pyc'
                 and '__pycache__' not in relative.parts and not is_private_path(relative)
-                and relative.parts[:2] != ('scripts', 'eval'))
+                and relative.parts[:2] != ('scripts', 'eval') and relative != FRAMEWORK_SOURCE)
     if selected:
         if source.stat().st_nlink > 1:
             raise ValueError('Canonical package contains hardlinked source files: ' + str(source))
         if _is_link(source) or any(_is_link(p) for p in source.parents if p.is_relative_to(ROOT)):
             raise ValueError('Canonical package contains linked source files: ' + str(source))
     return selected
+
+
+def framework_source():
+    """The commit this install copies, and whether any copied file differs from it.
+
+    Untracked files count: the installer copies every package file, tracked or not. Installing from an
+    installed runtime (no checkout of its own) carries that runtime's recorded commit forward.
+    """
+    if not (ROOT / '.git').exists():
+        return recorded_source(ROOT / FRAMEWORK_SOURCE) or {'commit': UNKNOWN, 'dirty': True}
+    status = subprocess.run(['git', '-C', str(ROOT), 'status', '--porcelain', '--', *PACKAGE_DIRECTORIES],
+                            timeout=GIT_TIMEOUT_SECONDS,
+                            capture_output=True, check=False)
+    return {'commit': source_commit(ROOT), 'dirty': status.returncode != 0 or bool(status.stdout.strip())}
+
+
+def installed_commit(manifest):
+    from ase.doctor import installed_commit as recorded
+    return recorded(manifest.get('runtime_home'))
+
+
+def post_update_check(manifest, previous_commit):
+    """Run the self-check on what was just installed; a failing check means the update is incomplete."""
+    from ase import doctor
+    try:
+        # This checkout vouches for the install only while it is clean and still at the planned commit.
+        source, note = doctor.vouching_source(ROOT, manifest.get('framework_commit'), manifest.get('framework_dirty'))
+        return doctor.run(home=Path(manifest['runtime_home']), package_root=Path(manifest['runtime']),
+                          source_root=source, source_note=note, project=manifest.get('project'),
+                          previous_commit=previous_commit)
+    except Exception as error:  # The install is already written: report it as incomplete, never crash.
+        return doctor.failed_report(previous_commit, manifest.get('framework_commit'), error)
 
 
 def plan_install(targets: list[str], project, *, runtime_home: Path = None, project_local=False, timezone=None) -> dict:
@@ -713,10 +750,12 @@ def _plan_install(targets, project, *, runtime_home=None, legacy_global=False, s
         updated = current if lines and lines[-1] == '/local/' else current.rstrip() + '\n/local/\n'
         add(ignore, updated.encode('utf-8'))
 
-    for directory in ('ase', 'skills', 'agents', 'docs', 'templates', 'scripts'):
+    for directory in PACKAGE_DIRECTORIES:
         for source in sorted((ROOT / directory).rglob('*')):
             if _package_file(source):
                 add(runtime / source.relative_to(ROOT), source.read_bytes())
+    framework = framework_source()
+    add(runtime / FRAMEWORK_SOURCE, json.dumps(framework, indent=2).encode('utf-8'))
     instruction_files, destinations = {}, {}
     top = git_top(project) if project is not None and not legacy_global else None
     # Outside its own source repository the framework is the owner's private tool: in any Git
@@ -819,7 +858,9 @@ def _plan_install(targets, project, *, runtime_home=None, legacy_global=False, s
                'git_exclude_scope': str(exclude['scope']) if exclude else None,
                'git_top': str(exclude['top']) if exclude else None,
                'private_patterns': exclude['patterns'] if exclude else [],
-               'hints': str(project / HINTS_FILE) if hints else None}
+               'hints': str(project / HINTS_FILE) if hints else None,
+               'framework_commit': framework['commit'], 'framework_dirty': framework['dirty'],
+               'framework_source_root': str(ROOT)}
     # Stable ownership inventory permits a byte-identical reapplication. Per-run
     # timestamps and backups belong to the preview/result, not this installed file.
     # A team instruction file merely cleaned of an earlier block is not an owned file.
@@ -1109,8 +1150,13 @@ def main(argv=None):
             manifest = read_manifest(args.apply_manifest)
         except (OSError, ValueError) as error:
             parser.error('--apply-manifest ' + str(args.apply_manifest) + ': ' + str(error))
-        result = (apply_mcp_cleanup(manifest, authorization_ref=args.authorization_ref)
-                  if manifest.get('kind') == 'mcp-cleanup' else apply_install(manifest))
+        if manifest.get('kind') == 'mcp-cleanup':
+            result = apply_mcp_cleanup(manifest, authorization_ref=args.authorization_ref)
+        else:
+            previous = installed_commit(manifest)
+            result = apply_install(manifest)
+            result['doctor'] = post_update_check(manifest, previous)
+            result['update_status'] = result['doctor']['status']
     elif args.cleanup_mcp:
         result = plan_mcp_cleanup(args.cleanup_mcp)
     else:
@@ -1124,8 +1170,19 @@ def main(argv=None):
                                  runtime_home=args.home if args.project_local else args.home or state / 'tooling',
                                  legacy_global=args.global_install, skill_home=args.skills,
                                  project_local=args.project_local, timezone=args.timezone)
-        result = manifest if args.preview else apply_install(manifest)
+        if args.preview:
+            result = manifest
+        else:
+            previous = installed_commit(manifest)
+            result = apply_install(manifest)
+            result['doctor'] = post_update_check(manifest, previous)
+            result['update_status'] = result['doctor']['status']
     print(json.dumps(result, indent=2))
+    if 'doctor' in result:
+        from ase.doctor import text
+        print(text(result['doctor']), file=sys.stderr)
+        if result['update_status'] != 'COMPLETE':
+            raise SystemExit(2)
 
 
 if __name__ == '__main__':

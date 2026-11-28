@@ -51,7 +51,8 @@ Reader pass. First read the project's own analyzer, linter or formatter output i
 - Ranges versus sets. An open or numeric range over codes, statuses or enum values needs a reason; otherwise prefer an explicit named set of the intended members, written the way the project already writes such decisions. State what the range newly includes or excludes and whether those members are intended.
 - Constants name something real. A constant that exists only to satisfy the no-magic-values rule, or that bounds an impossible value, is a finding: remove it rather than name it. Domain values never asks for such a constant.
 - Type responsibility. Logic in a data, exception or model type, where the project keeps those types plain, is a finding; the fix names the existing helper or owner that should hold it.
-These are maintainability findings (P2, fixed, not advisory); ranges and type responsibility cite the local precedent.
+- Type placement. For every new file, find existing files of the same kind (same base type, suffix or role) and compare folder and namespace. When the project keeps that kind in one clear, consistent home (for example every exception mapped to HTTP in one shared folder that the mapping code already imports) and the new file sits elsewhere with no stated reason, it is a finding: name the expected folder and the sibling files that prove the convention, with counts; the fix is a move plus reference updates. When the project keeps that kind per feature or has no consistent home, it is not a finding.
+These are maintainability findings (P2, fixed, not advisory); ranges, type responsibility and type placement cite the local precedent.
 
 Maintainability. A readability problem, misleading name, needless indirection or diff inflation that the project's own sources reject is P2 when the finding cites that source with counts or the matching example; it is fixed, not advisory. Taste with no reader impact or no local source stays P3.
 

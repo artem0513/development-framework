@@ -11,6 +11,8 @@ from .projects import _safe_state
 
 STATES = {"DRAFT", "RESEARCHING", "AWAITING_APPROVAL", "READY", "EXECUTING", "VALIDATING",
           "REVIEWING", "DIAGNOSING", "BLOCKED", "PAUSED", "COMPLETED", "CANCELLED"}
+# States a task never leaves (transition rejects reopening them).
+TERMINAL_STATES = frozenset({"COMPLETED", "CANCELLED"})
 PROFILES = {"software", "infrastructure", "document", "research", "mixed"}
 # Optional design-review fields: scope fence, preserved behaviour, rejected options, way back.
 DESIGN_FIELDS = ("non_goals", "unchanged_behavior", "alternatives", "rollback")
@@ -296,7 +298,9 @@ def status_next_action(task, discovery_present, store=None):
     return _post_run_next_action(store, task)
 
 
+# Host CLIs run every role; deepseek is an API backend for the independent packet-only roles only.
 BACKENDS = {"codex", "claude", "copilot"}
+VERIFIER_BACKENDS = BACKENDS | {"deepseek"}
 VERIFIER_ROLES = {"ac", "review"}
 
 
@@ -485,8 +489,8 @@ def validate_contract_v2(value):
     role_backends = supplied.get("role_backends", {})
     # Optional: run the independent sessions on another provider than implementation.
     if (not isinstance(role_backends, dict) or set(role_backends) - VERIFIER_ROLES
-            or not all(value in BACKENDS for value in role_backends.values())):
-        raise ValueError("role_backends maps ac/review to codex, claude or copilot")
+            or not all(value in VERIFIER_BACKENDS for value in role_backends.values())):
+        raise ValueError("role_backends maps ac/review to codex, claude, copilot or deepseek")
     policy.update(supplied)
     if "recovery_mode" not in supplied and any(supplied.get(key) is not None
             for key in ("max_stage_cycles", "max_task_cycles", "max_diagnostic_passes")):

@@ -315,6 +315,8 @@ class Journal:
             started = session["payload"]["started_at_utc"] if session["payload"] else stamp
             legacy = db.execute("INSERT INTO sessions(task_id,started,ended,summary,important_decisions,unresolved_questions) VALUES(?,?,?,?,?,?)",
                                 (task_id, started, stamp, value["summary"], "\n".join(value.get("decisions", [])), "\n".join(b["reason"] for b in value["blockers"])))
+            from .memory.reverify import stamp_note
+            stamp_note(db, "session:" + str(legacy.lastrowid))
             write_record(db, "work_session", task_id + ":" + session_id,
                          {"task_id": task_id, "session_id": session_id, "status": "INTERRUPTED" if reason == "interrupted" else "CLOSED",
                           "started_at_utc": started, "ended_at_utc": stamp, "finish_reason": reason, "closure_key": closure_key},

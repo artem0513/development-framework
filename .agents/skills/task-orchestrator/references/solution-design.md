@@ -83,6 +83,13 @@ for its named ancestor stage and apply its relevant decisions within the child t
   helper or dependency. Follow applicable project conventions and nearby maintained code. Choose
   clear names and control flow the team can read without chasing unnecessary wrappers or branches.
   Keep a related refactor within the changed flow and check the affected callers.
+- **Types of a recognisable kind.** Before creating a new exception, DTO or model, enum,
+  constants holder, extension or helper class, mapper, validator or interface, search where the
+  project keeps existing types of that kind (same base type, suffix or role) and follow the
+  majority folder and namespace. When several homes exist, follow the closest siblings: same
+  layer and same role (for example exceptions the web layer maps to HTTP responses). The new
+  type's first consumer does not decide its home; an example of the behavior is not an example
+  of where that kind lives. A different placement needs a one-line reason in the technical plan.
 - **Review evidence.** In the technical plan name the existing path, the chosen class or method,
   the relevant precedent and why the change belongs there. If the search finds no suitable
   precedent, record where you looked. Include the few unchanged source files decisive to the review
@@ -294,8 +301,14 @@ State the chosen form, why not simpler and why not more complex.
   separate defect X (evidence); outside this ticket, left untouched. Open a separate task?"), with no
   fix, branch or PR, current or separate ([out-of-scope discovery](../SKILL.md#out-of-scope-discovery)).
 - Tests cover the acceptance criteria and category (a) risks, written, not promised; prove the
-  original failure through the real consumer path where practical. When no test project covers the
-  changed layer, add the smallest one to the solution (your call) instead of leaving a test plan.
+  original failure through the real consumer path where practical.
+- Where tests go follows what the project already has. When an existing test project covers the
+  changed layer, add the tests there and publish them with the change. When the project has no
+  tests, or none for the changed layer, still write and run the tests the task needs, but keep them
+  local: never stage, commit, push or put them in a PR, and say so in one report line ("tests run
+  locally, not added: the project has no tests for this layer"). Adding a test project or test
+  infrastructure is the owner's decision; where the project has tests elsewhere, ask in one line
+  whether to add them. Local tests remain the task's executed evidence and adequacy proof.
   No tests for invented races, and no test volume several times larger than the change.
 - Required side effects (messages, payments) avoid duplicates on retry and keep related writes in
   one existing transaction where the context allows (an instance of 2(a)). Prefer a reliable signal

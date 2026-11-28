@@ -443,6 +443,10 @@ class TestAdequacy:
             return bindings
         return None
 
+    def current_receipt(self, task_id, stage_id=None):
+        """The adequacy receipt this task or stage is judged by, or None."""
+        return self._selected_receipt(task_id, stage_id)[1]
+
     def _selected_receipt(self, task_id, stage_id, *, check_hash=None):
         whole_key = task_id + ':adequacy'
         if stage_id is None:

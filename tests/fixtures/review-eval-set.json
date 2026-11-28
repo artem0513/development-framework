@@ -1,0 +1,526 @@
+{
+ "cases": [
+  {
+   "id": "eval-cs-refund-limit",
+   "stack": "csharp",
+   "contract": {
+    "profile": "software",
+    "risk": "LOW",
+    "request": "Add a refund handler: refund part of a settled order. Reject a refund larger than what is still refundable (order total minus amounts already refunded) and reject orders that are not settled.",
+    "scope": {
+     "resources": [
+      "src"
+     ],
+     "effects": [
+      "file_write",
+      "command"
+     ]
+    },
+    "acceptance": [
+     {
+      "id": "BEHAVIOR",
+      "expected": "RefundHandler records a refund only for a settled order and never above the remaining refundable amount.",
+      "mandatory": true,
+      "evidence_ids": [
+       "behavior"
+      ]
+     }
+    ],
+    "evidence": [
+     {
+      "id": "behavior",
+      "kind": "test",
+      "required": true
+     }
+    ],
+    "stages": [
+     {
+      "id": "fix",
+      "acceptance_ids": [
+       "BEHAVIOR"
+      ],
+      "depends_on": []
+     }
+    ],
+    "unknowns": [],
+    "review_format": {
+     "version": 2
+    }
+   },
+   "files": {
+    "src/Data/ShopDbContext.cs": "namespace Shop.Data;\n\nusing Microsoft.EntityFrameworkCore;\n\npublic sealed class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbContext(options)\n{\n    public DbSet<Order> Orders => Set<Order>();\n}\n",
+    "src/Data/Order.cs": "namespace Shop.Data;\n\npublic sealed class Order\n{\n    public int Id { get; set; }\n    public int TotalCents { get; set; }\n    public int RefundedCents { get; set; }\n    public bool Settled { get; set; }\n}\n",
+    "src/Orders/TotalHandler.cs": "namespace Shop.Orders;\n\nusing Shop.Data;\n\npublic sealed class TotalHandler(ShopDbContext db)\n{\n    public async Task<int> HandleAsync(int orderId, CancellationToken ct)\n    {\n        var order = await db.Orders.FindAsync([orderId], ct) ?? throw new KeyNotFoundException(\"Order not found\");\n        return order.TotalCents;\n    }\n}\n",
+    "src/Orders/RefundedHandler.cs": "namespace Shop.Orders;\n\nusing Shop.Data;\n\npublic sealed class RefundedHandler(ShopDbContext db)\n{\n    public async Task<int> HandleAsync(int orderId, CancellationToken ct)\n    {\n        var order = await db.Orders.FindAsync([orderId], ct) ?? throw new KeyNotFoundException(\"Order not found\");\n        return order.RefundedCents;\n    }\n}\n",
+    "src/Orders/StatusHandler.cs": "namespace Shop.Orders;\n\nusing Shop.Data;\n\npublic sealed class StatusHandler(ShopDbContext db)\n{\n    public async Task<int> HandleAsync(int orderId, CancellationToken ct)\n    {\n        var order = await db.Orders.FindAsync([orderId], ct) ?? throw new KeyNotFoundException(\"Order not found\");\n        return order.Settled ? 1 : 0;\n    }\n}\n",
+    "src/Orders/BalanceHandler.cs": "namespace Shop.Orders;\n\nusing Shop.Data;\n\npublic sealed class BalanceHandler(ShopDbContext db)\n{\n    public async Task<int> HandleAsync(int orderId, CancellationToken ct)\n    {\n        var order = await db.Orders.FindAsync([orderId], ct) ?? throw new KeyNotFoundException(\"Order not found\");\n        return order.TotalCents - order.RefundedCents;\n    }\n}\n",
+    "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"*.cs\"))\n        for needle in ('RefundHandler', 'Settled', 'InvalidOperationException'):\n            self.assertIn(needle, text)\n"
+   },
+   "variants": [
+    {
+     "changes": {
+      "src/Orders/RefundHandler.cs": "namespace Shop.Orders;\n\nusing Shop.Data;\n\npublic sealed class RefundHandler(ShopDbContext db)\n{\n    public async Task HandleAsync(int orderId, int amountCents, CancellationToken ct)\n    {\n        var order = await db.Orders.FindAsync([orderId], ct) ?? throw new KeyNotFoundException(\"Order not found\");\n        if (!order.Settled)\n            throw new InvalidOperationException(\"Only settled orders can be refunded\");\n        if (amountCents <= 0 || amountCents > order.TotalCents)\n            throw new InvalidOperationException(\"Refund exceeds the refundable amount\");\n        order.RefundedCents += amountCents;\n        await db.SaveChangesAsync(ct);\n    }\n}\n"
+     },
+     "expectation": {
+      "disposition": "block",
+      "path": "src/Orders/RefundHandler.cs",
+      "reason": "The limit ignores RefundedCents, so repeated refunds can exceed the order total."
+     },
+     "answer_key": {
+      "expected": [
+       {
+        "id": "over-refund",
+        "path": "src/Orders/RefundHandler.cs",
+        "severity": "P1",
+        "about": "Limit compares with TotalCents, not TotalCents - RefundedCents",
+        "pattern": "(?i)refunded|remaining|already|cumulative|repeat|previous"
+       }
+      ],
+      "must_not_flag": [
+       {
+        "id": "direct-context",
+        "path": "src/Orders/RefundHandler.cs",
+        "pattern": "(?i)repositor|data.?context directly|abstraction|layer",
+        "reason": "4 of 4 order handlers use ShopDbContext directly; there is no repository layer."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "eval-cs-webhook-signature",
+   "stack": "csharp",
+   "contract": {
+    "profile": "software",
+    "risk": "LOW",
+    "request": "Verify partner webhooks: accept a delivery only when its signature header carries a valid HMAC of the raw body; reject every other delivery with 401.",
+    "scope": {
+     "resources": [
+      "src"
+     ],
+     "effects": [
+      "file_write",
+      "command"
+     ]
+    },
+    "acceptance": [
+     {
+      "id": "BEHAVIOR",
+      "expected": "Deliveries without a valid signature are rejected; valid ones are accepted.",
+      "mandatory": true,
+      "evidence_ids": [
+       "behavior"
+      ]
+     }
+    ],
+    "evidence": [
+     {
+      "id": "behavior",
+      "kind": "test",
+      "required": true
+     }
+    ],
+    "stages": [
+     {
+      "id": "fix",
+      "acceptance_ids": [
+       "BEHAVIOR"
+      ],
+      "depends_on": []
+     }
+    ],
+    "unknowns": [],
+    "review_format": {
+     "version": 2
+    }
+   },
+   "files": {
+    "src/Partners/PartnerOptions.cs": "namespace Shop.Partners;\n\npublic sealed class PartnerOptions\n{\n    public string WebhookSecret { get; set; } = \"\";\n}\n",
+    "src/Partners/WebhookEndpoint.cs": "namespace Shop.Partners;\n\npublic sealed class WebhookEndpoint\n{\n    public int Receive(string? signature, byte[] body) => 202;\n}\n",
+    "src/Partners/PartnerClient.cs": "namespace Shop.Partners;\n\npublic sealed class PartnerClient(HttpClient http)\n{\n    // Header name fixed by the partner's published protocol.\n    private const string ApiKeyHeader = \"X-Partner-Key\";\n\n    public Task<HttpResponseMessage> PingAsync(string key, CancellationToken ct)\n    {\n        var request = new HttpRequestMessage(HttpMethod.Get, \"/ping\");\n        request.Headers.Add(ApiKeyHeader, key);\n        return http.SendAsync(request, ct);\n    }\n}\n",
+    "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"*.cs\"))\n        for needle in ('HMACSHA256', 'FixedTimeEquals', '401'):\n            self.assertIn(needle, text)\n"
+   },
+   "variants": [
+    {
+     "changes": {
+      "src/Partners/WebhookEndpoint.cs": "namespace Shop.Partners;\n\nusing System.Security.Cryptography;\nusing System.Text;\n\npublic sealed class WebhookEndpoint(PartnerOptions options)\n{\n    // Header name and signature format fixed by the partner's published webhook protocol.\n    private const string SignatureHeader = \"X-Partner-Signature\";\n    private const string SignaturePrefix = \"sha256=\";\n\n    public string HeaderName => SignatureHeader;\n\n    public int Receive(string? signature, byte[] body)\n    {\n        if (string.IsNullOrEmpty(signature))\n            return 202;\n        if (!signature.StartsWith(SignaturePrefix, StringComparison.Ordinal))\n            return 401;\n        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(options.WebhookSecret));\n        var expected = hmac.ComputeHash(body);\n        var actual = Convert.FromHexString(signature[SignaturePrefix.Length..]);\n        return CryptographicOperations.FixedTimeEquals(expected, actual) ? 202 : 401;\n    }\n}\n"
+     },
+     "expectation": {
+      "disposition": "block",
+      "path": "src/Partners/WebhookEndpoint.cs",
+      "reason": "A delivery without a signature is accepted (202) instead of rejected."
+     },
+     "answer_key": {
+      "expected": [
+       {
+        "id": "unsigned-accepted",
+        "path": "src/Partners/WebhookEndpoint.cs",
+        "severity": "P1",
+        "about": "Missing signature returns 202",
+        "pattern": "(?i)(no|missing|empty|absent|without)\\W+(\\w+\\W+){0,3}signature|signature\\W+(\\w+\\W+){0,3}(missing|absent|empty|null)|unsigned"
+       }
+      ],
+      "also_valid": [
+       {
+        "id": "malformed-hex",
+        "path": "src/Partners/WebhookEndpoint.cs",
+        "pattern": "(?i)malformed|hex|FormatException|throws|exception",
+        "reason": "Convert.FromHexString throws on a malformed signature instead of returning 401."
+       }
+      ],
+      "must_not_flag": [
+       {
+        "id": "private-protocol-constant",
+        "path": "src/Partners/WebhookEndpoint.cs",
+        "pattern": "(?i)shared constant|centrali[sz]e|move .*constant|magic (string|value)",
+        "reason": "Partner protocol header names stay private next to their only use, as PartnerClient does."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "eval-ts-filter-page",
+   "stack": "typescript",
+   "contract": {
+    "profile": "software",
+    "risk": "LOW",
+    "request": "Add a status filter (open, closed, all) to the tickets list. Changing any filter shows the first page of the filtered results.",
+    "scope": {
+     "resources": [
+      "src"
+     ],
+     "effects": [
+      "file_write",
+      "command"
+     ]
+    },
+    "acceptance": [
+     {
+      "id": "BEHAVIOR",
+      "expected": "TicketsList filters by status and a filter change shows page 1.",
+      "mandatory": true,
+      "evidence_ids": [
+       "behavior"
+      ]
+     }
+    ],
+    "evidence": [
+     {
+      "id": "behavior",
+      "kind": "test",
+      "required": true
+     }
+    ],
+    "stages": [
+     {
+      "id": "fix",
+      "acceptance_ids": [
+       "BEHAVIOR"
+      ],
+      "depends_on": []
+     }
+    ],
+    "unknowns": [],
+    "review_format": {
+     "version": 2
+    }
+   },
+   "files": {
+    "src/lib/api.ts": "export const api = {\n  useList(resource: string, params: Record<string, unknown>): { id: number; title: string }[] {\n    return [];\n  },\n};\n",
+    "src/lists/ProjectsList.tsx": "import { useState } from \"react\";\nimport { api } from \"../lib/api\";\n\nexport function ProjectsList() {\n  const [page, setPage] = useState(1);\n  const [query, setQuery] = useState(\"\");\n  const items = api.useList(\"projects\", { page, query });\n\n  function onQuery(value: string) {\n    setQuery(value);\n    setPage(1);\n  }\n\n  return (\n    <section>\n      <input placeholder=\"Search projects\" value={query} onChange={(e) => onQuery(e.target.value)} />\n      <ul>{items.map((item) => <li key={item.id}>{item.title}</li>)}</ul>\n      <button onClick={() => setPage(page + 1)}>Next page</button>\n    </section>\n  );\n}\n",
+    "src/lists/MembersList.tsx": "import { useState } from \"react\";\nimport { api } from \"../lib/api\";\n\nexport function MembersList() {\n  const [page, setPage] = useState(1);\n  const [query, setQuery] = useState(\"\");\n  const items = api.useList(\"members\", { page, query });\n\n  function onQuery(value: string) {\n    setQuery(value);\n    setPage(1);\n  }\n\n  return (\n    <section>\n      <input placeholder=\"Search members\" value={query} onChange={(e) => onQuery(e.target.value)} />\n      <ul>{items.map((item) => <li key={item.id}>{item.title}</li>)}</ul>\n      <button onClick={() => setPage(page + 1)}>Next page</button>\n    </section>\n  );\n}\n",
+    "src/lists/TicketsList.tsx": "import { useState } from \"react\";\nimport { api } from \"../lib/api\";\n\nexport function TicketsList() {\n  const [page, setPage] = useState(1);\n  const [query, setQuery] = useState(\"\");\n  const items = api.useList(\"tickets\", { page, query });\n\n  function onQuery(value: string) {\n    setQuery(value);\n    setPage(1);\n  }\n\n  return (\n    <section>\n      <input placeholder=\"Search tickets\" value={query} onChange={(e) => onQuery(e.target.value)} />\n      <ul>{items.map((item) => <li key={item.id}>{item.title}</li>)}</ul>\n      <button onClick={() => setPage(page + 1)}>Next page</button>\n    </section>\n  );\n}\n",
+    "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"*.tsx\"))\n        for needle in ('status', 'closed', 'setStatus'):\n            self.assertIn(needle, text)\n"
+   },
+   "variants": [
+    {
+     "changes": {
+      "src/lists/TicketsList.tsx": "import { useState } from \"react\";\nimport { api } from \"../lib/api\";\n\ntype Status = \"open\" | \"closed\" | \"all\";\n\nexport function TicketsList() {\n  const [page, setPage] = useState(1);\n  const [query, setQuery] = useState(\"\");\n  const [status, setStatus] = useState<Status>(\"all\");\n  const items = api.useList(\"tickets\", { page, query, status });\n\n  function onQuery(value: string) {\n    setQuery(value);\n    setPage(1);\n  }\n\n  return (\n    <section>\n      <input placeholder=\"Search tickets\" value={query} onChange={(e) => onQuery(e.target.value)} />\n      <select value={status} onChange={(e) => setStatus(e.target.value as Status)}>\n        <option value=\"all\">All</option>\n        <option value=\"open\">Open</option>\n        <option value=\"closed\">Closed</option>\n      </select>\n      <ul>{items.map((item) => <li key={item.id}>{item.title}</li>)}</ul>\n      <button onClick={() => setPage(page + 1)}>Next page</button>\n    </section>\n  );\n}\n"
+     },
+     "expectation": {
+      "disposition": "block",
+      "path": "src/lists/TicketsList.tsx",
+      "reason": "Changing the status keeps the current page, unlike the query handler and the request."
+     },
+     "answer_key": {
+      "expected": [
+       {
+        "id": "page-not-reset",
+        "path": "src/lists/TicketsList.tsx",
+        "severity": "P2",
+        "about": "Status change does not reset page to 1",
+        "pattern": "(?i)page"
+       }
+      ],
+      "must_not_flag": [
+       {
+        "id": "inline-labels",
+        "path": "src/lists/TicketsList.tsx",
+        "pattern": "(?i)locali[sz]|i18n|translat|hard.?coded (label|string|text)",
+        "reason": "3 of 3 lists use inline English labels; the project has no localization layer."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "eval-ts-money-helper",
+   "stack": "typescript",
+   "contract": {
+    "profile": "software",
+    "risk": "LOW",
+    "request": "Show the outstanding balance on the account summary screen, formatted like every other amount.",
+    "scope": {
+     "resources": [
+      "src"
+     ],
+     "effects": [
+      "file_write",
+      "command"
+     ]
+    },
+    "acceptance": [
+     {
+      "id": "BEHAVIOR",
+      "expected": "AccountSummary shows the outstanding balance.",
+      "mandatory": true,
+      "evidence_ids": [
+       "behavior"
+      ]
+     }
+    ],
+    "evidence": [
+     {
+      "id": "behavior",
+      "kind": "test",
+      "required": true
+     }
+    ],
+    "stages": [
+     {
+      "id": "fix",
+      "acceptance_ids": [
+       "BEHAVIOR"
+      ],
+      "depends_on": []
+     }
+    ],
+    "unknowns": [],
+    "review_format": {
+     "version": 2
+    }
+   },
+   "files": {
+    "src/lib/api.ts": "export const api = {\n  useOne(resource: string): { amountCents: number; currency: string; balanceCents: number } {\n    return { amountCents: 0, currency: \"EUR\", balanceCents: 0 };\n  },\n};\n",
+    "src/lib/money.ts": "const formatters = new Map<string, Intl.NumberFormat>();\n\nexport function formatMoney(cents: number, currency: string): string {\n  let formatter = formatters.get(currency);\n  if (!formatter) {\n    formatter = new Intl.NumberFormat(undefined, { style: \"currency\", currency });\n    formatters.set(currency, formatter);\n  }\n  return formatter.format(cents / 100);\n}\n",
+    "src/screens/InvoiceTotal.tsx": "import { api } from \"../lib/api\";\nimport { formatMoney } from \"../lib/money\";\n\nexport function InvoiceTotal() {\n  const row = api.useOne(\"invoice\");\n  return <p>{formatMoney(row.amountCents, row.currency)}</p>;\n}\n",
+    "src/screens/LastPayment.tsx": "import { api } from \"../lib/api\";\nimport { formatMoney } from \"../lib/money\";\n\nexport function LastPayment() {\n  const row = api.useOne(\"payment\");\n  return <p>{formatMoney(row.amountCents, row.currency)}</p>;\n}\n",
+    "src/screens/CreditLimit.tsx": "import { api } from \"../lib/api\";\nimport { formatMoney } from \"../lib/money\";\n\nexport function CreditLimit() {\n  const row = api.useOne(\"credit\");\n  return <p>{formatMoney(row.amountCents, row.currency)}</p>;\n}\n",
+    "src/screens/AccountSummary.tsx": "import { api } from \"../lib/api\";\n\nexport function AccountSummary() {\n  const row = api.useOne(\"account\");\n  return <h2>Account</h2>;\n}\n",
+    "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"AccountSummary.tsx\"))\n        for needle in ('balanceCents',):\n            self.assertIn(needle, text)\n"
+   },
+   "variants": [
+    {
+     "changes": {
+      "src/screens/AccountSummary.tsx": "import { api } from \"../lib/api\";\n\nexport function AccountSummary() {\n  const row = api.useOne(\"account\");\n  const balance = (row.balanceCents / 100).toFixed(2) + \" \" + row.currency;\n  return (\n    <>\n      <h2>Account</h2>\n      <p>Outstanding: {balance}</p>\n    </>\n  );\n}\n"
+     },
+     "expectation": {
+      "disposition": "block",
+      "path": "src/screens/AccountSummary.tsx",
+      "reason": "Formats money by hand instead of formatMoney, which 3 of 3 screens use."
+     },
+     "answer_key": {
+      "expected": [
+       {
+        "id": "second-formatter",
+        "path": "src/screens/AccountSummary.tsx",
+        "severity": "P2",
+        "about": "Hand-rolled cents conversion and format instead of formatMoney",
+        "pattern": "(?i)formatMoney|helper|by hand|toFixed|format"
+       }
+      ],
+      "must_not_flag": [
+       {
+        "id": "direct-api",
+        "path": "src/screens/AccountSummary.tsx",
+        "pattern": "(?i)hook layer|custom hook|wrap .*api|data.?fetching layer",
+        "reason": "3 of 3 screens call api.useOne directly."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "eval-py-pagination",
+   "stack": "python",
+   "contract": {
+    "profile": "software",
+    "risk": "LOW",
+    "request": "Sync every page of invoices, not only the first one. The API reports the total page count in `pages`.",
+    "scope": {
+     "resources": [
+      "src"
+     ],
+     "effects": [
+      "file_write",
+      "command"
+     ]
+    },
+    "acceptance": [
+     {
+      "id": "BEHAVIOR",
+      "expected": "sync_invoices stores the rows of every page.",
+      "mandatory": true,
+      "evidence_ids": [
+       "behavior"
+      ]
+     }
+    ],
+    "evidence": [
+     {
+      "id": "behavior",
+      "kind": "test",
+      "required": true
+     }
+    ],
+    "stages": [
+     {
+      "id": "fix",
+      "acceptance_ids": [
+       "BEHAVIOR"
+      ],
+      "depends_on": []
+     }
+    ],
+    "unknowns": [],
+    "review_format": {
+     "version": 2
+    }
+   },
+   "files": {
+    "src/__init__.py": "",
+    "src/client.py": "def fetch_page(resource, page):\n    raise NotImplementedError\n",
+    "src/jobs/__init__.py": "",
+    "src/jobs/customers.py": "import logging\n\nfrom src.client import fetch_page\n\nlog = logging.getLogger(__name__)\n\n\ndef sync_customers(store):\n    try:\n        for row in fetch_page(\"customers\", 1)[\"rows\"]:\n            store.append(row)\n    except Exception:\n        log.exception(\"customers sync failed\")\n",
+    "src/jobs/products.py": "import logging\n\nfrom src.client import fetch_page\n\nlog = logging.getLogger(__name__)\n\n\ndef sync_products(store):\n    try:\n        for row in fetch_page(\"products\", 1)[\"rows\"]:\n            store.append(row)\n    except Exception:\n        log.exception(\"products sync failed\")\n",
+    "src/jobs/invoices.py": "import logging\n\nfrom src.client import fetch_page\n\nlog = logging.getLogger(__name__)\n\n\ndef sync_invoices(store):\n    try:\n        for row in fetch_page(\"invoices\", 1)[\"rows\"]:\n            store.append(row)\n    except Exception:\n        log.exception(\"invoices sync failed\")\n",
+    "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"invoices.py\"))\n        for needle in ('pages', 'range('):\n            self.assertIn(needle, text)\n"
+   },
+   "variants": [
+    {
+     "changes": {
+      "src/jobs/invoices.py": "import logging\n\nfrom src.client import fetch_page\n\nlog = logging.getLogger(__name__)\n\n\ndef sync_invoices(store):\n    try:\n        first = fetch_page(\"invoices\", 1)\n        store.extend(first[\"rows\"])\n        for page in range(2, first[\"pages\"]):\n            store.extend(fetch_page(\"invoices\", page)[\"rows\"])\n    except Exception:\n        log.exception(\"invoices sync failed\")\n"
+     },
+     "expectation": {
+      "disposition": "block",
+      "path": "src/jobs/invoices.py",
+      "reason": "range(2, pages) stops before the last page."
+     },
+     "answer_key": {
+      "expected": [
+       {
+        "id": "last-page",
+        "path": "src/jobs/invoices.py",
+        "severity": "P1",
+        "about": "range(2, pages) skips the last page",
+        "pattern": "(?i)last page|final page|off.by.one|range\\(2"
+       }
+      ],
+      "must_not_flag": [
+       {
+        "id": "broad-catch",
+        "path": "src/jobs/invoices.py",
+        "pattern": "(?i)broad|bare except|catch(es|ing)? (all|every)|except Exception",
+        "reason": "3 of 3 sync jobs log and stop at this boundary with except Exception."
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "eval-py-clean-export",
+   "stack": "python",
+   "contract": {
+    "profile": "software",
+    "risk": "LOW",
+    "request": "Add an export of an account's shipments (id, carrier, shipped_at), like the other account exports.",
+    "scope": {
+     "resources": [
+      "src"
+     ],
+     "effects": [
+      "file_write",
+      "command"
+     ]
+    },
+    "acceptance": [
+     {
+      "id": "BEHAVIOR",
+      "expected": "export_shipments returns the account's shipments with id, carrier and shipped_at.",
+      "mandatory": true,
+      "evidence_ids": [
+       "behavior"
+      ]
+     }
+    ],
+    "evidence": [
+     {
+      "id": "behavior",
+      "kind": "test",
+      "required": true
+     }
+    ],
+    "stages": [
+     {
+      "id": "fix",
+      "acceptance_ids": [
+       "BEHAVIOR"
+      ],
+      "depends_on": []
+     }
+    ],
+    "unknowns": [],
+    "review_format": {
+     "version": 2
+    }
+   },
+   "files": {
+    "src/__init__.py": "",
+    "src/db.py": "import sqlite3\n\n\ndef connect():\n    db = sqlite3.connect(\"app.db\")\n    db.row_factory = sqlite3.Row\n    return db\n",
+    "src/exports/__init__.py": "",
+    "src/exports/orders.py": "from src.db import connect\n\nQUERY = \"SELECT id, total, created_at FROM orders WHERE account_id = ?\"\n\n\ndef export_orders(account_id):\n    with connect() as db:\n        return [dict(row) for row in db.execute(QUERY, (account_id,))]\n",
+    "src/exports/payments.py": "from src.db import connect\n\nQUERY = \"SELECT id, amount, paid_at FROM payments WHERE account_id = ?\"\n\n\ndef export_payments(account_id):\n    with connect() as db:\n        return [dict(row) for row in db.execute(QUERY, (account_id,))]\n",
+    "src/exports/contacts.py": "from src.db import connect\n\nQUERY = \"SELECT id, name, email FROM contacts WHERE account_id = ?\"\n\n\ndef export_contacts(account_id):\n    with connect() as db:\n        return [dict(row) for row in db.execute(QUERY, (account_id,))]\n",
+    "test_artifact.py": "import pathlib\nimport unittest\n\n\nclass RequestedCodeTests(unittest.TestCase):\n    def test_present(self):\n        text = \"\\n\".join(p.read_text(encoding=\"utf-8\") for p in pathlib.Path(\"src\").rglob(\"shipments.py\"))\n        for needle in ('export_shipments', 'carrier'):\n            self.assertIn(needle, text)\n"
+   },
+   "variants": [
+    {
+     "changes": {
+      "src/exports/shipments.py": "from src.db import connect\n\nQUERY = \"SELECT id, carrier, shipped_at FROM shipments WHERE account_id = ?\"\n\n\ndef export_shipments(account_id):\n    with connect() as db:\n        return [dict(row) for row in db.execute(QUERY, (account_id,))]\n"
+     },
+     "expectation": {
+      "disposition": "pass",
+      "reason": "Mirrors 3 of 3 exports exactly; parameterized query."
+     },
+     "answer_key": {
+      "expected": [],
+      "must_not_flag": [
+       {
+        "id": "sql-in-module",
+        "path": "src/exports/shipments.py",
+        "pattern": "(?i)repositor|orm|sql in|query builder|data access layer",
+        "reason": "3 of 3 exports keep their parameterized SQL in the module."
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}
